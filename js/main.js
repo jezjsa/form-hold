@@ -106,7 +106,7 @@ function paintBoard() {
   const rows = allRows.filter((row) => row.createdAt >= since);
   if (status) status.textContent = `Hex · ${boardDifficulty[0].toUpperCase()}${boardDifficulty.slice(1)}`;
   if (!rows.length) {
-    body.innerHTML = `<tr><td colspan="7">No scores yet. Hold the hex, then post.</td></tr>`;
+    body.innerHTML = `<tr><td colspan="7">No scores yet. Hold the Hex, then post.</td></tr>`;
     return;
   }
   body.innerHTML = rows.map((row, index) => `
@@ -141,7 +141,7 @@ function showStartCard() {
   const start = document.getElementById("btn-start");
   const status = document.getElementById("score-status");
   overlay?.classList.remove("hidden");
-  if (title) title.textContent = "Hold the hex";
+  if (title) title.textContent = "Hold the Hex";
   if (copy) {
     copy.textContent = "Defend your base from attackers. Place shapes in or around the hex. Violet dots come through the open wall. Rust breakers chew the brass — slowly.";
     copy.classList.remove("hidden");

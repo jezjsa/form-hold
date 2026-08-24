@@ -1,4 +1,4 @@
-# Form Hold
+# Hold the Hex
 
 Local-only first pass. One hexagon hold: five walls, an opening, a small
 hex base in the middle. Dots come for the base. Shapes shoot them.
