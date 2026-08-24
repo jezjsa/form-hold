@@ -35,6 +35,9 @@ const TYPES = {
 };
 const SHAPE_STROKE = "#f3efe6";
 const SHOT_STROKE = "#f3efe6";
+const SELL_RATE = 0.6;
+const MENU_OFFSET = 58;
+const MENU_RADIUS = 20;
 
 const $ = (id) => document.getElementById(id);
 
@@ -115,6 +118,57 @@ function drawShape(ctx, kind, x, y, size) {
   ctx.restore();
 }
 
+function drawSellButton(ctx, spot, gold, hovered) {
+  const { x, y } = spot;
+  const r = MENU_RADIUS;
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(x, y + 2, r + 3, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(0,0,0,0.28)";
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x, y, r + 3.5, 0, Math.PI * 2);
+  ctx.fillStyle = "#141820";
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x, y, r + 2, 0, Math.PI * 2);
+  ctx.fillStyle = "#d7b07a";
+  ctx.fill();
+  const fill = ctx.createRadialGradient(x - 5, y - 7, 2, x, y, r);
+  fill.addColorStop(0, hovered ? "#e87868" : "#d45a48");
+  fill.addColorStop(1, hovered ? "#9a2c22" : "#8a241c");
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fillStyle = fill;
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x, y, r - 1, 0, Math.PI * 2);
+  ctx.strokeStyle = "rgba(255,255,255,0.22)";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.fillStyle = "#f0d24a";
+  ctx.font = "700 22px Helvetica Neue, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("$", x, y + 1);
+  const pill = `+${gold}`;
+  ctx.font = "700 12px Helvetica Neue, sans-serif";
+  const labelW = Math.max(36, ctx.measureText(pill).width + 14);
+  const pillX = x - labelW / 2;
+  const pillY = y + r + 4;
+  ctx.beginPath();
+  if (typeof ctx.roundRect === "function") {
+    ctx.roundRect(pillX, pillY, labelW, 16, 8);
+  } else {
+    ctx.rect(pillX, pillY, labelW, 16);
+  }
+  ctx.fillStyle = "#d7b07a";
+  ctx.fill();
+  ctx.fillStyle = "#1c1808";
+  ctx.fillText(pill, x, pillY + 8);
+  ctx.restore();
+}
+
 export function startGame(canvas, hooks = {}) {
   const ctx = canvas.getContext("2d");
   const waveCap = Number.isInteger(hooks.waveCap) ? hooks.waveCap : 200;
@@ -146,6 +200,8 @@ export function startGame(canvas, hooks = {}) {
     spawnLeft: 0,
     toSpawn: 0,
     hover: null,
+    selectedTurret: null,
+    hoverMenu: null,
     turrets: [],
     enemies: [],
     shots: [],
@@ -222,6 +278,53 @@ export function startGame(canvas, hooks = {}) {
     });
   };
 
+  const sellValue = (turret) => Math.round(TYPES[turret.type].cost * SELL_RATE);
+
+  const turretAt = (x, y) => {
+    let best = null;
+    let bestD = 26;
+    for (const turret of state.turrets) {
+      const d = Math.hypot(turret.x - x, turret.y - y);
+      if (d < bestD) {
+        best = turret;
+        bestD = d;
+      }
+    }
+    return best;
+  };
+
+  const sellSpot = (turret) => {
+    const pad = MENU_RADIUS + 16;
+    return {
+      x: Math.max(pad, Math.min(view.w - pad, turret.x - MENU_OFFSET)),
+      y: Math.max(pad, Math.min(view.h - pad, turret.y)),
+    };
+  };
+
+  const hitSellMenu = (px, py) => {
+    const turret = state.selectedTurret;
+    if (!turret || !state.turrets.includes(turret)) return false;
+    const spot = sellSpot(turret);
+    return (px - spot.x) ** 2 + (py - spot.y) ** 2 <= (MENU_RADIUS + 6) ** 2;
+  };
+
+  const clearGunSelection = () => {
+    state.selectedTurret = null;
+    state.hoverMenu = null;
+  };
+
+  const sellSelected = () => {
+    const turret = state.selectedTurret;
+    if (!turret || !state.turrets.includes(turret)) return;
+    const gold = sellValue(turret);
+    state.gold += gold;
+    state.turrets = state.turrets.filter((row) => row !== turret);
+    state.ticks.push({ x: turret.x, y: turret.y - 14, text: `+${gold}`, life: 0.85 });
+    if (ui.hint) ui.hint.textContent = `Sold ${TYPES[turret.type].name} for ${gold} gold.`;
+    clearGunSelection();
+    syncHud();
+  };
+
   const canvasPos = (event) => {
     const rect = canvas.getBoundingClientRect();
     return {
@@ -233,19 +336,39 @@ export function startGame(canvas, hooks = {}) {
   canvas.addEventListener("pointermove", (event) => {
     if (state.phase === "menu" || state.phase === "lost" || state.phase === "won") {
       state.hover = null;
+      state.hoverMenu = null;
       return;
     }
     const p = canvasPos(event);
     const s = snap(p.x, p.y);
+    state.hoverMenu = hitSellMenu(p.x, p.y) ? "sell" : null;
+    const over = turretAt(p.x, p.y);
+    if (over) {
+      state.hover = { x: over.x, y: over.y, ok: false, turret: over };
+      return;
+    }
     state.hover = { ...s, ok: canPlace(s.x, s.y) };
   });
   canvas.addEventListener("pointerleave", () => {
     state.hover = null;
+    state.hoverMenu = null;
   });
   canvas.addEventListener("pointerdown", (event) => {
     if (state.phase === "menu" || state.phase === "lost" || state.phase === "won") return;
     const p = canvasPos(event);
+    if (hitSellMenu(p.x, p.y)) {
+      sellSelected();
+      return;
+    }
+    const over = turretAt(p.x, p.y);
+    if (over) {
+      state.selectedTurret = over;
+      const spec = TYPES[over.type];
+      if (ui.hint) ui.hint.textContent = `${spec.name} — sell for ${sellValue(over)} gold.`;
+      return;
+    }
     const s = snap(p.x, p.y);
+    clearGunSelection();
     const spec = TYPES[state.selected];
     if (!canPlace(s.x, s.y)) return;
     if (state.gold < spec.cost) {
@@ -265,6 +388,10 @@ export function startGame(canvas, hooks = {}) {
     });
     syncHud();
   });
+  canvas.addEventListener("contextmenu", (event) => {
+    event.preventDefault();
+    clearGunSelection();
+  });
 
   const togglePause = () => {
     if (state.phase === "menu" || state.phase === "lost" || state.phase === "won") return;
@@ -279,6 +406,11 @@ export function startGame(canvas, hooks = {}) {
     if (event.repeat || event.metaKey || event.ctrlKey || event.altKey) return;
     const space = event.code === "Space" || event.key === " ";
     const rush = event.code === "ArrowRight" || event.key === "ArrowRight";
+    if (event.code === "Escape") {
+      event.preventDefault();
+      clearGunSelection();
+      return;
+    }
     if (!space && !rush) return;
     const target = event.target;
     if (
@@ -352,10 +484,11 @@ export function startGame(canvas, hooks = {}) {
     state.spawned = 0;
     state.hurt = 0;
     state.hover = null;
+    clearGunSelection();
     if (ui.pause) ui.pause.textContent = "Pause";
     if (ui.hint) {
       ui.hint.textContent = play
-        ? "Place shapes in or around the hex. Amber sparks blow a gun if they get close."
+        ? "Place shapes in or around the hex. Click a gun to sell it back for less."
         : "Defend your base from attackers.";
     }
     if (play) hooks.onReset?.();
@@ -692,6 +825,7 @@ export function startGame(canvas, hooks = {}) {
   const detonateGun = (enemy, turret) => {
     enemy.dead = true;
     state.turrets = state.turrets.filter((row) => row !== turret);
+    if (state.selectedTurret === turret) clearGunSelection();
     state.pops.push({ x: turret.x, y: turret.y, life: 0.6, r: 30 });
     state.pops.push({ x: enemy.x, y: enemy.y, life: 0.4, r: 16 });
     state.ticks.push({ x: turret.x, y: turret.y - 14, text: "boom", life: 0.75 });
@@ -1103,7 +1237,7 @@ export function startGame(canvas, hooks = {}) {
     drawWalls();
     drawBase(t);
 
-    if (state.hover) {
+    if (state.hover && !state.hover.turret) {
       ctx.globalAlpha = state.hover.ok ? 0.55 : 0.22;
       drawShape(ctx, state.selected, state.hover.x, state.hover.y, 28);
       ctx.globalAlpha = 1;
@@ -1120,11 +1254,27 @@ export function startGame(canvas, hooks = {}) {
       const nudge = wave * 5.5;
       const px = turret.x + (turret.aimX || 0) * nudge;
       const py = turret.y + (turret.aimY || 0) * nudge;
+      if (turret === state.selectedTurret) {
+        ctx.beginPath();
+        ctx.strokeStyle = "rgba(215,176,122,0.38)";
+        ctx.lineWidth = 1.6;
+        ctx.arc(turret.x, turret.y, TYPES[turret.type].range, 0, Math.PI * 2);
+        ctx.stroke();
+      }
       ctx.beginPath();
       ctx.fillStyle = "rgba(0,0,0,0.28)";
       ctx.ellipse(px + 4, py + 8, 12 + wave, 5, 0, 0, Math.PI * 2);
       ctx.fill();
       drawShape(ctx, turret.type, px, py, 30 + wave * 4);
+    }
+
+    if (state.selectedTurret && state.turrets.includes(state.selectedTurret)) {
+      drawSellButton(
+        ctx,
+        sellSpot(state.selectedTurret),
+        sellValue(state.selectedTurret),
+        state.hoverMenu === "sell",
+      );
     }
 
     for (const shot of state.shots) {

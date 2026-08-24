@@ -144,7 +144,7 @@ function showStartCard() {
   overlay?.classList.remove("hidden");
   if (title) title.textContent = "Hold the Hex";
   if (copy) {
-    copy.textContent = "Defend your base from attackers. Place shapes in or around the hex. Violet dots come through the open wall. Red breakers chew the brass — slowly. Amber sparks blow a gun if they get close. Rush the countdown for leftover seconds × 6 × the next wave.";
+    copy.textContent = "Defend your base from attackers. Place shapes in or around the hex. Click a gun to sell it back for less than it cost. Violet dots come through the open wall. Red breakers chew the brass — slowly. Amber sparks blow a gun if they get close. Rush the countdown for leftover seconds × 6 × the next wave.";
     copy.classList.remove("hidden");
   }
   score?.classList.add("hidden");
