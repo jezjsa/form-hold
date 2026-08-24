@@ -105,6 +105,7 @@ export function startGame(canvas, hooks = {}) {
     ticks: [],
     walls: makeWalls(),
     spawned: 0,
+    hurt: 0,
   };
 
   for (const [id, spec] of Object.entries(TYPES)) {
@@ -268,6 +269,7 @@ export function startGame(canvas, hooks = {}) {
     state.ticks = [];
     state.walls = makeWalls();
     state.spawned = 0;
+    state.hurt = 0;
     state.hover = null;
     if (ui.pause) ui.pause.textContent = "Pause";
     if (ui.hint) {
@@ -641,14 +643,53 @@ export function startGame(canvas, hooks = {}) {
     }
   };
 
+  const mixRgb = (a, b, t) => {
+    const p = Math.max(0, Math.min(1, t));
+    return [
+      a[0] + (b[0] - a[0]) * p,
+      a[1] + (b[1] - a[1]) * p,
+      a[2] + (b[2] - a[2]) * p,
+    ];
+  };
+
+  const rgb = (c, a) => (
+    a == null
+      ? `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`
+      : `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`
+  );
+
+  const baseTone = (frac, hit) => {
+    const ice = [122, 212, 255];
+    const gold = [232, 184, 96];
+    const rose = [255, 92, 118];
+    const mag = [255, 118, 208];
+    let col = frac > 0.5
+      ? mixRgb(gold, ice, (frac - 0.5) / 0.5)
+      : mixRgb(rose, gold, frac / 0.5);
+    if (hit) col = mixRgb(col, mag, 0.62);
+    return col;
+  };
+
   const drawBase = (t) => {
-    const pulse = 1 + Math.sin(t * 3.2) * 0.04;
+    const frac = Math.max(0, Math.min(1, state.energy / 100));
+    const hit = state.hurt > 0;
+    const tone = baseTone(frac, hit);
+    const pulse = 1 + Math.sin(t * (hit ? 10 : 3.2)) * (hit ? 0.075 : 0.04);
     const pts = hexPoints(view.cx, view.cy, view.baseR * pulse);
     ctx.save();
-    ctx.shadowColor = "rgba(122, 212, 255, 0.4)";
-    ctx.shadowBlur = 18;
-    ctx.fillStyle = "#152028";
-    ctx.strokeStyle = "#7ad4ff";
+    if (hit) {
+      ctx.beginPath();
+      ctx.fillStyle = rgb(tone, 0.16 + Math.sin(t * 14) * 0.05);
+      const bloom = hexPoints(view.cx, view.cy, view.baseR * 1.55);
+      ctx.moveTo(bloom[0].x, bloom[0].y);
+      for (const p of bloom.slice(1)) ctx.lineTo(p.x, p.y);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.shadowColor = rgb(tone, hit ? 0.72 : 0.4);
+    ctx.shadowBlur = hit ? 28 : 18;
+    ctx.fillStyle = hit ? "#2a1520" : "#152028";
+    ctx.strokeStyle = rgb(tone);
     ctx.lineWidth = 4;
     ctx.beginPath();
     ctx.moveTo(pts[0].x, pts[0].y);
@@ -657,13 +698,35 @@ export function startGame(canvas, hooks = {}) {
     ctx.fill();
     ctx.stroke();
     ctx.shadowBlur = 0;
-    const ring = hexPoints(view.cx, view.cy, view.baseR * 0.62);
-    ctx.fillStyle = `rgba(122, 212, 255, ${0.22 + (state.energy / 100) * 0.5})`;
+    const gem = hexPoints(view.cx, view.cy, view.baseR * 0.52);
+    ctx.fillStyle = rgb(tone, 0.2 + frac * 0.5);
     ctx.beginPath();
-    ctx.moveTo(ring[0].x, ring[0].y);
-    for (const p of ring.slice(1)) ctx.lineTo(p.x, p.y);
+    ctx.moveTo(gem[0].x, gem[0].y);
+    for (const p of gem.slice(1)) ctx.lineTo(p.x, p.y);
     ctx.closePath();
     ctx.fill();
+    const barR = view.baseR * 1.46;
+    ctx.beginPath();
+    ctx.strokeStyle = "rgba(8,11,15,0.7)";
+    ctx.lineWidth = 7;
+    ctx.arc(view.cx, view.cy, barR, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.strokeStyle = "rgba(243,239,230,0.28)";
+    ctx.lineWidth = 5.4;
+    ctx.arc(view.cx, view.cy, barR, 0, Math.PI * 2);
+    ctx.stroke();
+    if (frac > 0.01) {
+      ctx.beginPath();
+      ctx.strokeStyle = rgb(tone);
+      ctx.lineWidth = hit ? 5.6 : 4.6;
+      ctx.lineCap = "round";
+      ctx.shadowColor = rgb(tone, 0.55);
+      ctx.shadowBlur = hit ? 12 : 6;
+      ctx.arc(view.cx, view.cy, barR, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * frac);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
     ctx.restore();
   };
 
@@ -801,6 +864,7 @@ export function startGame(canvas, hooks = {}) {
         for (const turret of state.turrets) fire(turret, dt);
         const onBase = state.enemies.filter((e) => e.atBase).length;
         if (onBase) {
+          state.hurt = 0.55;
           state.energy -= onBase * 3.4 * dt;
           if (state.energy <= 0) {
             state.energy = 0;
@@ -832,6 +896,7 @@ export function startGame(canvas, hooks = {}) {
       }
       state.ticks = state.ticks.filter((n) => n.life > 0);
       for (const wall of state.walls) wall.flash = Math.max(0, wall.flash - dt);
+      state.hurt = Math.max(0, state.hurt - dt);
       syncHud();
     }
 
