@@ -17,7 +17,7 @@ import {
   watchLivePlayers,
 } from "./social.js";
 
-const WAVE_CAP = 20;
+const WAVE_CAP = 200;
 let runId = null;
 let lastResult = null;
 let boardDifficulty = "easy";
@@ -172,7 +172,7 @@ function showEndCard(result) {
   if (copy) {
     const you = playerName();
     copy.textContent = result.won
-      ? `Twenty waves down. The base still stands${you ? ` — well held, ${you}` : ""}.`
+      ? `Two hundred waves down. The base still stands${you ? ` — well held, ${you}` : ""}.`
       : `The attackers reached the core${you ? ` — better luck next time, ${you}` : ""}.`;
   }
   if (score) {

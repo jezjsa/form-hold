@@ -38,6 +38,11 @@ const SHOT_STROKE = "#f3efe6";
 
 const $ = (id) => document.getElementById(id);
 
+function threatOf(wave) {
+  if (wave <= 20) return wave;
+  return 20 + (wave - 20) * 0.28;
+}
+
 function makeWalls() {
   return Array.from({ length: 6 }, (_, i) => ({
     hp: i === OPEN_EDGE ? 0 : WALL_HP,
@@ -112,7 +117,7 @@ function drawShape(ctx, kind, x, y, size) {
 
 export function startGame(canvas, hooks = {}) {
   const ctx = canvas.getContext("2d");
-  const waveCap = Number.isInteger(hooks.waveCap) ? hooks.waveCap : 20;
+  const waveCap = Number.isInteger(hooks.waveCap) ? hooks.waveCap : 200;
   const ui = {
     hint: $("hint"),
     shapes: $("shapes"),
@@ -348,7 +353,7 @@ export function startGame(canvas, hooks = {}) {
 
   const startWave = () => {
     state.phase = "wave";
-    state.toSpawn = 8 + state.wave * 4;
+    state.toSpawn = Math.min(100, Math.round(8 + threatOf(state.wave) * 4));
     state.spawnLeft = 0.15;
     if (ui.hint) ui.hint.textContent = `Wave ${state.wave} — hold the hex. Watch the walls.`;
   };
@@ -400,10 +405,10 @@ export function startGame(canvas, hooks = {}) {
         wall: wall.i,
         x: at.x,
         y: at.y,
-        hp: 16 + state.wave * 4.2,
-        max: 16 + state.wave * 4.2,
-        speed: 30 + state.wave * 1.8,
-        chew: CHEW + state.wave * 0.28,
+        hp: 16 + threatOf(state.wave) * 4.2,
+        max: 16 + threatOf(state.wave) * 4.2,
+        speed: 30 + threatOf(state.wave) * 1.8,
+        chew: CHEW + threatOf(state.wave) * 0.28,
         atBase: false,
         chewing: false,
         orbit: Math.random() < 0.5 ? 1 : -1,
@@ -416,9 +421,9 @@ export function startGame(canvas, hooks = {}) {
         wall: gate.i,
         x: at.x,
         y: at.y,
-        hp: 8 + state.wave * 3.2,
-        max: 8 + state.wave * 3.2,
-        speed: 46 + state.wave * 3.4 + (Math.random() - 0.5) * 8,
+        hp: 8 + threatOf(state.wave) * 3.2,
+        max: 8 + threatOf(state.wave) * 3.2,
+        speed: 46 + threatOf(state.wave) * 3.4 + (Math.random() - 0.5) * 8,
         atBase: false,
         chewing: false,
         orbit: Math.random() < 0.5 ? 1 : -1,
