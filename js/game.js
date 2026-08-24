@@ -880,7 +880,7 @@ export function startGame(canvas, hooks = {}) {
       enemy.dead = true;
       state.kills += 1;
       state.score += 12;
-      state.gold += 4 + Math.floor(state.wave * 0.6);
+      state.gold += enemy.role === "breaker" ? 2 : 1;
       state.pops.push({ x: enemy.x, y: enemy.y, life: 0.35, r: 10 });
       return;
     }
@@ -1230,7 +1230,7 @@ export function startGame(canvas, hooks = {}) {
         && state.toSpawn <= 0
         && state.enemies.every((enemy) => enemy.role === "breaker")
       ) {
-        state.gold += 12 + state.wave * 2;
+        state.gold += 8 + Math.floor(threatOf(state.wave) * 0.5);
         state.score += 40 + state.wave * 8;
         if (state.wave >= state.waveCap) {
           finish(true);
