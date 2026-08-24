@@ -88,7 +88,7 @@ export function startGame(canvas, hooks = {}) {
     kills: 0,
     wave: 1,
     waveCap,
-    phase: "build",
+    phase: "menu",
     paused: false,
     muted: false,
     speed: 1,
@@ -178,6 +178,10 @@ export function startGame(canvas, hooks = {}) {
   };
 
   canvas.addEventListener("pointermove", (event) => {
+    if (state.phase === "menu" || state.phase === "lost" || state.phase === "won") {
+      state.hover = null;
+      return;
+    }
     const p = canvasPos(event);
     const s = snap(p.x, p.y);
     state.hover = { ...s, ok: canPlace(s.x, s.y) };
@@ -186,7 +190,7 @@ export function startGame(canvas, hooks = {}) {
     state.hover = null;
   });
   canvas.addEventListener("pointerdown", (event) => {
-    if (state.phase === "lost" || state.phase === "won") return;
+    if (state.phase === "menu" || state.phase === "lost" || state.phase === "won") return;
     const p = canvasPos(event);
     const s = snap(p.x, p.y);
     const spec = TYPES[state.selected];
@@ -206,11 +210,14 @@ export function startGame(canvas, hooks = {}) {
   });
 
   ui.pause?.addEventListener("click", () => {
-    if (state.phase === "lost" || state.phase === "won") return;
+    if (state.phase === "menu" || state.phase === "lost" || state.phase === "won") return;
     state.paused = !state.paused;
     ui.pause.textContent = state.paused ? "Resume" : "Pause";
   });
-  ui.restart?.addEventListener("click", () => reset());
+  ui.restart?.addEventListener("click", () => {
+    reset({ play: false });
+    hooks.onMenu?.();
+  });
   ui.speed?.addEventListener("click", () => {
     state.speed = state.speed === 1 ? 2 : state.speed === 2 ? 3 : 1;
     ui.speed.textContent = `Speed x${state.speed}`;
@@ -235,22 +242,22 @@ export function startGame(canvas, hooks = {}) {
     });
     if (ui.hint) {
       ui.hint.textContent = won
-        ? "Hex held. Post the score to Convex."
-        : "The base ran out of energy. Post the score, or reset for another hold.";
+        ? "Hex held."
+        : "The base ran out of energy.";
     }
     syncHud();
   };
 
-  const reset = () => {
+  const reset = ({ play = false } = {}) => {
     state.gold = 80;
     state.energy = 100;
     state.score = 0;
     state.kills = 0;
     state.wave = 1;
-    state.phase = "build";
+    state.phase = play ? "build" : "menu";
     state.paused = false;
     state.posted = false;
-    state.startedAt = performance.now();
+    state.startedAt = play ? performance.now() : 0;
     state.buildLeft = 12;
     state.spawnLeft = 0;
     state.toSpawn = 0;
@@ -261,9 +268,14 @@ export function startGame(canvas, hooks = {}) {
     state.ticks = [];
     state.walls = makeWalls();
     state.spawned = 0;
+    state.hover = null;
     if (ui.pause) ui.pause.textContent = "Pause";
-    if (ui.hint) ui.hint.textContent = "Place shapes in or around the hex. Breakers chew the brass — slowly.";
-    hooks.onReset?.();
+    if (ui.hint) {
+      ui.hint.textContent = play
+        ? "Place shapes in or around the hex. Breakers chew the brass — slowly."
+        : "Defend your base from attackers.";
+    }
+    if (play) hooks.onReset?.();
     syncHud();
   };
 
@@ -677,7 +689,7 @@ export function startGame(canvas, hooks = {}) {
     last = now;
     view = view.w !== canvas.width ? layout() : view;
 
-    if (!state.paused && state.phase !== "lost" && state.phase !== "won") {
+    if (!state.paused && state.phase !== "menu" && state.phase !== "lost" && state.phase !== "won") {
       if (state.phase === "build" || state.phase === "between") {
         state.buildLeft -= dt;
         if (state.buildLeft <= 0) startWave();
@@ -734,4 +746,12 @@ export function startGame(canvas, hooks = {}) {
 
   syncHud();
   requestAnimationFrame(tick);
+
+  return {
+    begin: () => reset({ play: true }),
+    menu: () => {
+      reset({ play: false });
+      hooks.onMenu?.();
+    },
+  };
 }

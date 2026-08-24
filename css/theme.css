@@ -135,12 +135,86 @@ html, body {
   color: var(--dim);
 }
 
+.play-field {
+  position: relative;
+}
+
 .stage-wrap {
   position: relative;
   border-left: 1px solid var(--line);
   border-right: 1px solid var(--line);
   background: #0a0e12;
   min-height: 560px;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  display: grid;
+  place-items: center;
+  background: rgba(8, 12, 16, 0.68);
+}
+
+.overlay.hidden { display: none; }
+
+.panel {
+  width: min(460px, 92%);
+  padding: 28px 26px;
+  background: var(--panel-solid);
+  border: 1px solid var(--brass);
+  color: var(--text);
+  text-align: center;
+  line-height: 1.45;
+}
+
+.kicker {
+  margin: 0 0 6px;
+  color: var(--brass);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+}
+
+.panel h2 {
+  margin: 0 0 10px;
+  font-size: 1.8rem;
+}
+
+.overlay-copy { margin: 0 0 18px; color: var(--text); }
+
+.overlay-score {
+  margin: -4px 0 16px;
+  color: var(--brass);
+  font-size: 2.6rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.overlay-score.hidden,
+.run-recap.hidden,
+.score-form.hidden,
+#btn-start.hidden,
+.start-actions.hidden {
+  display: none;
+}
+
+.run-recap {
+  margin: 0 0 16px;
+  text-align: left;
+}
+
+.run-recap p {
+  margin: 0 0 6px;
+  color: var(--dim);
+  font-size: 0.9rem;
+}
+
+.start-actions {
+  display: grid;
+  gap: 8px;
 }
 
 #game {
@@ -303,24 +377,42 @@ html, body {
 .board-ver { color: var(--dim); font-variant-numeric: tabular-nums; }
 
 .score-form {
-  margin: 0 0 16px;
-  padding: 12px;
-  border: 1px solid var(--line);
-  background: #141920;
+  margin: 0 0 8px;
+  text-align: left;
+}
+
+.score-form label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dim);
 }
 
 .score-form-row {
   display: flex;
   gap: 8px;
-  margin-top: 8px;
 }
 
-.score-form input {
+.score-form-row input {
   flex: 1;
-  padding: 8px 10px;
-  background: #101820;
-  border: 1px solid var(--line);
-  color: var(--text);
+  min-width: 0;
+  width: auto;
+}
+
+.score-status {
+  margin: 8px 0 0;
+  font-size: 0.8rem;
+  color: var(--dim);
+}
+
+.score-status:empty { display: none; }
+
+.score-skip {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
 }
 
 .signup-form {

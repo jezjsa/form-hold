@@ -79,14 +79,38 @@
         </div>
       </header>
 
-      <div class="stage-wrap">
-        <canvas id="game" width="1280" height="720"></canvas>
-        <p class="hint" id="hint">Place shapes in or around the hex. Breakers chew the brass — slowly.</p>
-      </div>
+      <div class="play-field">
+        <div class="stage-wrap">
+          <canvas id="game" width="1280" height="720"></canvas>
+          <p class="hint" id="hint">Place shapes in or around the hex. Breakers chew the brass — slowly.</p>
+        </div>
 
-      <footer class="dock">
-        <div class="shapes" id="shapes"></div>
-      </footer>
+        <footer class="dock">
+          <div class="shapes" id="shapes"></div>
+        </footer>
+
+        <div id="overlay" class="overlay">
+          <div class="panel">
+            <p class="kicker" id="overlay-kicker">Hex · Easy</p>
+            <h2 id="overlay-title">Hold the hex</h2>
+            <p id="overlay-copy" class="overlay-copy">Defend your base from attackers. Place shapes in or around the hex. Violet dots come through the open wall. Rust breakers chew the brass — slowly.</p>
+            <p id="overlay-score" class="overlay-score hidden"></p>
+            <div id="run-recap" class="run-recap hidden"></div>
+            <form id="score-form" class="score-form hidden">
+              <label for="player-name">Post your score</label>
+              <div class="score-form-row">
+                <input id="player-name" name="name" maxlength="16" minlength="2" autocomplete="nickname" placeholder="Your name" required />
+                <button type="submit" class="btn btn-primary" id="btn-post-score">Post</button>
+              </div>
+              <p id="score-status" class="score-status"></p>
+              <button type="button" id="btn-skip-score" class="btn btn-ghost score-skip">Skip</button>
+            </form>
+            <div class="start-actions" id="start-actions">
+              <button type="button" id="btn-start" class="btn btn-primary">Start game</button>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <section class="scoreboard" id="scoreboard">
         <div class="scoreboard-head">
@@ -105,14 +129,6 @@
           <button type="button" class="board-tab" data-range="week">This week</button>
           <button type="button" class="board-tab" data-range="today">Today</button>
         </div>
-        <form id="score-form" class="score-form hidden">
-          <label for="player-name">Post this hold</label>
-          <div class="score-form-row">
-            <input id="player-name" name="name" maxlength="16" minlength="2" autocomplete="nickname" placeholder="Your name" required />
-            <button type="submit" class="btn btn-primary" id="btn-post-score">Post</button>
-          </div>
-          <p id="score-status" class="signup-status"></p>
-        </form>
         <table>
           <thead>
             <tr>

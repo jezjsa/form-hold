@@ -122,13 +122,88 @@ function paintBoard() {
   `).join("");
 }
 
-function showPost(result) {
-  lastResult = result;
+function formatDuration(ms) {
+  if (!Number.isFinite(ms) || ms < 1) return "—";
+  const total = Math.round(ms / 1000);
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function showStartCard() {
+  lastResult = null;
+  const overlay = document.getElementById("overlay");
+  const title = document.getElementById("overlay-title");
+  const copy = document.getElementById("overlay-copy");
+  const score = document.getElementById("overlay-score");
+  const recap = document.getElementById("run-recap");
   const form = document.getElementById("score-form");
+  const start = document.getElementById("btn-start");
+  const status = document.getElementById("score-status");
+  overlay?.classList.remove("hidden");
+  if (title) title.textContent = "Hold the hex";
+  if (copy) {
+    copy.textContent = "Defend your base from attackers. Place shapes in or around the hex. Violet dots come through the open wall. Rust breakers chew the brass — slowly.";
+    copy.classList.remove("hidden");
+  }
+  score?.classList.add("hidden");
+  recap?.classList.add("hidden");
+  form?.classList.add("hidden");
+  if (status) status.textContent = "";
+  if (start) {
+    start.textContent = "Start game";
+    start.classList.remove("hidden");
+  }
+}
+
+function showEndCard(result) {
+  lastResult = result;
+  const overlay = document.getElementById("overlay");
+  const title = document.getElementById("overlay-title");
+  const copy = document.getElementById("overlay-copy");
+  const score = document.getElementById("overlay-score");
+  const recap = document.getElementById("run-recap");
+  const form = document.getElementById("score-form");
+  const start = document.getElementById("btn-start");
   const name = document.getElementById("player-name");
+  const status = document.getElementById("score-status");
+  overlay?.classList.remove("hidden");
+  if (title) title.textContent = result.won ? "Hex held" : "Base fallen";
+  if (copy) {
+    const you = playerName();
+    copy.textContent = result.won
+      ? `Twenty waves down. The base still stands${you ? ` — well held, ${you}` : ""}.`
+      : `The attackers reached the core${you ? ` — better luck next time, ${you}` : ""}.`;
+  }
+  if (score) {
+    score.textContent = result.score.toLocaleString();
+    score.classList.remove("hidden");
+  }
+  if (recap) {
+    recap.innerHTML = `
+      <p>Wave ${result.wave} / ${WAVE_CAP}${result.won ? " — hex held" : ""}</p>
+      <p>Score ${result.score.toLocaleString()} · ${Number(result.kills || 0).toLocaleString()} kills</p>
+      <p>Run time ${formatDuration(result.durationMs)}</p>
+    `;
+    recap.classList.remove("hidden");
+  }
   form?.classList.remove("hidden");
-  if (name instanceof HTMLInputElement) name.value = playerName();
-  form?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  start?.classList.add("hidden");
+  if (status) status.textContent = "";
+  if (name instanceof HTMLInputElement) {
+    name.value = playerName();
+    name.focus();
+  }
+}
+
+function showPlayAgain() {
+  document.getElementById("score-form")?.classList.add("hidden");
+  const start = document.getElementById("btn-start");
+  if (start) {
+    start.textContent = "Play again";
+    start.classList.remove("hidden");
+  }
+  document.getElementById("overlay")?.classList.remove("hidden");
 }
 
 async function refreshBoard() {
@@ -232,8 +307,8 @@ document.getElementById("score-form")?.addEventListener("submit", async (event) 
       email: currentUser()?.email,
     });
     if (note) note.textContent = "Posted to the live board.";
-    document.getElementById("score-form")?.classList.add("hidden");
     lastResult = null;
+    showPlayAgain();
     void refreshBoard();
   } catch (err) {
     if (note) note.textContent = err instanceof Error ? err.message : "Could not post.";
@@ -268,8 +343,9 @@ window.addEventListener("pagehide", () => {
 });
 
 const canvas = document.getElementById("game");
+let hold = null;
 if (canvas instanceof HTMLCanvasElement) {
-  startGame(canvas, {
+  hold = startGame(canvas, {
     waveCap: WAVE_CAP,
     version: APP_VERSION,
     onHud: (hud) => {
@@ -283,21 +359,38 @@ if (canvas instanceof HTMLCanvasElement) {
       if (score) score.textContent = hud.score.toLocaleString();
       if (wave) wave.textContent = `${hud.wave} / ${hud.waveCap}`;
       if (next) {
-        next.textContent = hud.phase === "wave"
-          ? "In wave"
-          : `Next: ${Math.max(0, Math.ceil(hud.next))}`;
+        next.textContent = hud.phase === "menu"
+          ? "Ready"
+          : hud.phase === "wave"
+            ? "In wave"
+            : `Next: ${Math.max(0, Math.ceil(hud.next))}`;
       }
     },
     onOver: (result) => {
-      showPost(result);
+      showEndCard(result);
+    },
+    onMenu: () => {
+      showStartCard();
     },
     onReset: async () => {
       lastResult = null;
-      document.getElementById("score-form")?.classList.add("hidden");
       runId = await startRun();
     },
   });
-  void startRun().then((id) => {
-    runId = id;
-  });
 }
+
+document.getElementById("btn-start")?.addEventListener("click", () => {
+  const start = document.getElementById("btn-start");
+  if (start?.textContent === "Play again") {
+    hold?.menu();
+    return;
+  }
+  document.getElementById("overlay")?.classList.add("hidden");
+  lastResult = null;
+  hold?.begin();
+});
+
+document.getElementById("btn-skip-score")?.addEventListener("click", () => {
+  lastResult = null;
+  showPlayAgain();
+});
