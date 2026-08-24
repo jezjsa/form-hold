@@ -1,4 +1,4 @@
-import { hexPoints, hexSides, nearestEdge, distToSegment } from "./hex.js";
+import { hexPoints, hexSides, nearestEdge, distToSegment, pointInHex } from "./hex.js";
 
 const CELL = 38;
 const OPEN_EDGE = 3;
@@ -316,6 +316,7 @@ export function startGame(canvas, hooks = {}) {
         chew: CHEW + state.wave * 0.28,
         atBase: false,
         chewing: false,
+        orbit: Math.random() < 0.5 ? 1 : -1,
       });
     } else {
       const at = spawnAtSide(gate, along);
@@ -329,6 +330,7 @@ export function startGame(canvas, hooks = {}) {
         speed: 46 + state.wave * 3.4,
         atBase: false,
         chewing: false,
+        orbit: Math.random() < 0.5 ? 1 : -1,
       });
     }
     state.spawned += 1;
@@ -344,6 +346,80 @@ export function startGame(canvas, hooks = {}) {
       next: state.buildLeft,
       phase: state.phase,
     });
+  };
+
+  const wrapAngle = (a) => {
+    let x = a;
+    while (x > Math.PI) x -= Math.PI * 2;
+    while (x < -Math.PI) x += Math.PI * 2;
+    return x;
+  };
+
+  const gunCentroid = () => {
+    if (!state.turrets.length) return null;
+    let x = 0;
+    let y = 0;
+    for (const turret of state.turrets) {
+      x += turret.x;
+      y += turret.y;
+    }
+    return { x: x / state.turrets.length, y: y / state.turrets.length };
+  };
+
+  const shyOfGuns = (x, y, orbit) => {
+    let ox = 0;
+    let oy = 0;
+    for (const turret of state.turrets) {
+      const spec = TYPES[turret.type];
+      const dx = x - turret.x;
+      const dy = y - turret.y;
+      const d = Math.hypot(dx, dy) || 1;
+      const danger = spec.range * 0.48;
+      if (d >= danger) continue;
+      const w = 1 - d / danger;
+      const tx = -dy / d;
+      const ty = dx / d;
+      ox += (dx / d) * w * 1.8 + tx * orbit * w * 0.85;
+      oy += (dy / d) * w * 1.8 + ty * orbit * w * 0.85;
+    }
+    const guns = gunCentroid();
+    if (guns) {
+      const dx = x - guns.x;
+      const dy = y - guns.y;
+      const d = Math.hypot(dx, dy) || 1;
+      const blob = 78;
+      if (d < blob) {
+        const w = 1 - d / blob;
+        const tx = -dy / d;
+        const ty = dx / d;
+        ox += (dx / d) * w * 2.2 + tx * orbit * w * 1.15;
+        oy += (dy / d) * w * 2.2 + ty * orbit * w * 1.15;
+      }
+    }
+    return { x: ox, y: oy };
+  };
+
+  const flankAroundGuns = (enemy) => {
+    const guns = gunCentroid();
+    if (!guns) return null;
+    const eAng = Math.atan2(enemy.y - view.cy, enemy.x - view.cx);
+    const gAng = Math.atan2(guns.y - view.cy, guns.x - view.cx);
+    const dist = Math.hypot(enemy.x - view.cx, enemy.y - view.cy) || 1;
+    const hot = Math.cos(eAng - gAng);
+    if (hot < -0.18 && dist < view.baseR + 70) {
+      return { x: (view.cx - enemy.x) / dist, y: (view.cy - enemy.y) / dist, dive: true };
+    }
+    const fromGuns = wrapAngle(eAng - gAng);
+    const turn = Math.abs(fromGuns) < 0.2 ? (enemy.orbit || 1) : (fromGuns >= 0 ? 1 : -1);
+    const holdR = view.baseR + 34 + Math.max(0, hot) * view.arena * 0.46;
+    const tx = -Math.sin(eAng) * turn;
+    const ty = Math.cos(eAng) * turn;
+    const radial = Math.max(-0.4, Math.min(0.7, (holdR - dist) / (view.arena * 0.22)));
+    return {
+      x: tx + Math.cos(eAng) * radial,
+      y: ty + Math.sin(eAng) * radial,
+      dive: false,
+    };
   };
 
   const breachWall = (index) => {
@@ -403,6 +479,25 @@ export function startGame(canvas, hooks = {}) {
     const dist = Math.hypot(toBaseX, toBaseY) || 1;
     let vx = toBaseX / dist;
     let vy = toBaseY / dist;
+
+    const inYard = dist < view.arena - WALL * 0.1
+      || pointInHex(enemy.x, enemy.y, view.cx, view.cy, view.arena - WALL * 0.2);
+    const onCore = dist < view.baseR + 16;
+    if (inYard && !onCore && state.turrets.length) {
+      const flank = flankAroundGuns(enemy);
+      if (flank) {
+        vx = flank.x;
+        vy = flank.y;
+        if (!flank.dive) {
+          const shy = shyOfGuns(enemy.x, enemy.y, enemy.orbit || 1);
+          vx += shy.x;
+          vy += shy.y;
+        }
+        const n = Math.hypot(vx, vy) || 1;
+        vx /= n;
+        vy /= n;
+      }
+    }
 
     const wall = nearestEdge(enemy.x, enemy.y, edges);
     if (wall && wall.dist < WALL * 0.5 + ENEMY_R + 6) {
