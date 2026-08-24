@@ -13,7 +13,6 @@ const TYPES = {
     range: 118,
     rate: 6.2,
     damage: 3.2,
-    color: "#e08a4a",
     blurb: "Fast pulses",
   },
   square: {
@@ -22,7 +21,6 @@ const TYPES = {
     range: 156,
     rate: 1.35,
     damage: 16,
-    color: "#7aa2ff",
     blurb: "Heavy shot",
   },
   triangle: {
@@ -32,10 +30,11 @@ const TYPES = {
     rate: 2.1,
     damage: 7,
     pierce: 3,
-    color: "#c6e36a",
     blurb: "Pierces a line",
   },
 };
+const SHAPE_STROKE = "#f3efe6";
+const SHOT_STROKE = "#f3efe6";
 
 const $ = (id) => document.getElementById(id);
 
@@ -47,25 +46,68 @@ function makeWalls() {
   }));
 }
 
-function drawShape(ctx, kind, x, y, size, color) {
-  ctx.fillStyle = color;
-  ctx.strokeStyle = "rgba(255,255,255,0.22)";
-  ctx.lineWidth = 1.2;
+function roundedPoly(ctx, points, radius) {
+  const n = points.length;
+  for (let i = 0; i < n; i += 1) {
+    const prev = points[(i + n - 1) % n];
+    const curr = points[i];
+    const next = points[(i + 1) % n];
+    const inX = curr.x - prev.x;
+    const inY = curr.y - prev.y;
+    const outX = next.x - curr.x;
+    const outY = next.y - curr.y;
+    const inLen = Math.hypot(inX, inY) || 1;
+    const outLen = Math.hypot(outX, outY) || 1;
+    const r = Math.min(radius, inLen / 2, outLen / 2);
+    const startX = curr.x - (inX / inLen) * r;
+    const startY = curr.y - (inY / inLen) * r;
+    const endX = curr.x + (outX / outLen) * r;
+    const endY = curr.y + (outY / outLen) * r;
+    if (i === 0) ctx.moveTo(startX, startY);
+    else ctx.lineTo(startX, startY);
+    ctx.quadraticCurveTo(curr.x, curr.y, endX, endY);
+  }
+  ctx.closePath();
+}
+
+function shapeStrokeWidth(ctx) {
+  const canvas = ctx.canvas;
+  const cssW = canvas.clientWidth || canvas.width;
+  return 3 * (cssW ? canvas.width / cssW : 1);
+}
+
+function drawShape(ctx, kind, x, y, size) {
+  ctx.save();
+  ctx.strokeStyle = SHAPE_STROKE;
+  ctx.lineWidth = shapeStrokeWidth(ctx);
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
   ctx.beginPath();
   if (kind === "circle") {
-    ctx.arc(x, y, size * 0.46, 0, Math.PI * 2);
+    ctx.arc(x, y, size * 0.42, 0, Math.PI * 2);
   } else if (kind === "square") {
-    const s = size * 0.38;
-    ctx.rect(x - s, y - s, s * 2, s * 2);
+    const s = size * 0.36;
+    const radius = Math.max(2.4, size * 0.09);
+    if (typeof ctx.roundRect === "function") {
+      ctx.roundRect(x - s, y - s, s * 2, s * 2, radius);
+    } else {
+      roundedPoly(ctx, [
+        { x: x - s, y: y - s },
+        { x: x + s, y: y - s },
+        { x: x + s, y: y + s },
+        { x: x - s, y: y + s },
+      ], radius);
+    }
   } else {
-    const r = size * 0.48;
-    ctx.moveTo(x, y - r);
-    ctx.lineTo(x + r * 0.9, y + r * 0.72);
-    ctx.lineTo(x - r * 0.9, y + r * 0.72);
-    ctx.closePath();
+    const h = size * 0.44;
+    roundedPoly(ctx, [
+      { x, y: y - h },
+      { x: x + h * 0.95, y: y + h * 0.72 },
+      { x: x - h * 0.95, y: y + h * 0.72 },
+    ], Math.max(2.4, size * 0.1));
   }
-  ctx.fill();
   ctx.stroke();
+  ctx.restore();
 }
 
 export function startGame(canvas, hooks = {}) {
@@ -119,7 +161,7 @@ export function startGame(canvas, hooks = {}) {
       <span><b>${spec.name}</b><small>${spec.cost} · ${spec.blurb}</small></span>
     `;
     const icon = btn.querySelector("canvas").getContext("2d");
-    drawShape(icon, id, 11, 11, 20, spec.color);
+    drawShape(icon, id, 11, 11, 20);
     btn.addEventListener("click", () => {
       state.selected = id;
       for (const node of ui.shapes.children) node.classList.toggle("on", node.dataset.type === id);
@@ -592,7 +634,7 @@ export function startGame(canvas, hooks = {}) {
         y1: turret.y,
         x2: turret.x + ux * spec.range,
         y2: turret.y + uy * spec.range,
-        color: spec.color,
+        color: SHOT_STROKE,
         life: 0.12,
         wide: 2.4,
       });
@@ -606,7 +648,7 @@ export function startGame(canvas, hooks = {}) {
       y1: turret.y,
       x2: target.x,
       y2: target.y,
-      color: spec.color,
+      color: SHOT_STROKE,
       life: turret.type === "square" ? 0.16 : 0.08,
       wide: turret.type === "square" ? 3.2 : 1.6,
     });
@@ -834,7 +876,7 @@ export function startGame(canvas, hooks = {}) {
 
     if (state.hover) {
       ctx.globalAlpha = state.hover.ok ? 0.55 : 0.22;
-      drawShape(ctx, state.selected, state.hover.x, state.hover.y, 28, TYPES[state.selected].color);
+      drawShape(ctx, state.selected, state.hover.x, state.hover.y, 28);
       ctx.globalAlpha = 1;
       if (state.hover.ok) {
         ctx.beginPath();
@@ -849,7 +891,7 @@ export function startGame(canvas, hooks = {}) {
       ctx.fillStyle = "rgba(0,0,0,0.28)";
       ctx.ellipse(turret.x + 4, turret.y + 8, 12, 5, 0, 0, Math.PI * 2);
       ctx.fill();
-      drawShape(ctx, turret.type, turret.x, turret.y, 30, TYPES[turret.type].color);
+      drawShape(ctx, turret.type, turret.x, turret.y, 30);
     }
 
     for (const shot of state.shots) {
@@ -868,9 +910,9 @@ export function startGame(canvas, hooks = {}) {
       const r = breaker ? ENEMY_R + 2.2 : ENEMY_R;
       ctx.beginPath();
       ctx.fillStyle = breaker
-        ? (enemy.chewing ? "#e39a4a" : "#c46a32")
+        ? (enemy.chewing ? "#ff6b5a" : "#e24b4b")
         : (enemy.atBase ? "#e8a0ff" : "#c45cff");
-      ctx.shadowColor = breaker ? "rgba(227, 154, 74, 0.5)" : "rgba(196, 92, 255, 0.5)";
+      ctx.shadowColor = breaker ? "rgba(226, 75, 75, 0.55)" : "rgba(196, 92, 255, 0.5)";
       ctx.shadowBlur = 10;
       if (breaker) {
         ctx.moveTo(enemy.x, enemy.y - r);
@@ -884,7 +926,7 @@ export function startGame(canvas, hooks = {}) {
       ctx.shadowBlur = 0;
       ctx.fillStyle = "rgba(0,0,0,0.35)";
       ctx.fillRect(enemy.x - 8, enemy.y - 14, 16, 2);
-      ctx.fillStyle = breaker ? "#e08a4a" : "#7ad4ff";
+      ctx.fillStyle = breaker ? "#ff6b5a" : "#e8a0ff";
       ctx.fillRect(enemy.x - 8, enemy.y - 14, 16 * Math.max(0, enemy.hp / enemy.max), 2);
     }
 
