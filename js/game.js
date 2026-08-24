@@ -1,9 +1,11 @@
-import { hexPoints, hexEdges, pointInHex, nearestEdge } from "./hex.js";
+import { hexPoints, hexSides, nearestEdge, distToSegment } from "./hex.js";
 
 const CELL = 38;
 const OPEN_EDGE = 3;
 const WALL = 18;
 const ENEMY_R = 7;
+const WALL_HP = 380;
+const CHEW = 7.4;
 const TYPES = {
   circle: {
     name: "Circle",
@@ -36,6 +38,14 @@ const TYPES = {
 };
 
 const $ = (id) => document.getElementById(id);
+
+function makeWalls() {
+  return Array.from({ length: 6 }, (_, i) => ({
+    hp: i === OPEN_EDGE ? 0 : WALL_HP,
+    max: WALL_HP,
+    flash: 0,
+  }));
+}
 
 function drawShape(ctx, kind, x, y, size, color) {
   ctx.fillStyle = color;
@@ -93,6 +103,8 @@ export function startGame(canvas, hooks = {}) {
     shots: [],
     pops: [],
     ticks: [],
+    walls: makeWalls(),
+    spawned: 0,
   };
 
   for (const [id, spec] of Object.entries(TYPES)) {
@@ -122,19 +134,13 @@ export function startGame(canvas, hooks = {}) {
     const h = canvas.height;
     const cx = w * 0.5;
     const cy = h * 0.5 + 8;
-    const arena = Math.min(w, h) * 0.42;
+    const arena = Math.min(w, h) * 0.36;
     const outer = hexPoints(cx, cy, arena);
     const inner = hexPoints(cx, cy, arena - WALL * 0.85);
-    const walls = hexEdges(outer, OPEN_EDGE);
-    const gapA = outer[OPEN_EDGE];
-    const gapB = outer[(OPEN_EDGE + 1) % 6];
-    const gapMid = { x: (gapA.x + gapB.x) / 2, y: (gapA.y + gapB.y) / 2 };
-    const spawn = {
-      x: cx + (gapMid.x - cx) * 1.38,
-      y: cy + (gapMid.y - cy) * 1.38,
-    };
+    const sides = hexSides(outer, cx, cy);
+    const fieldR = Math.min(w, h) * 0.48 - 16;
     const baseR = arena * 0.13;
-    return { w, h, cx, cy, arena, outer, inner, walls, gapA, gapB, gapMid, spawn, baseR };
+    return { w, h, cx, cy, arena, outer, inner, sides, fieldR, baseR };
   };
 
   let view = layout();
@@ -148,10 +154,17 @@ export function startGame(canvas, hooks = {}) {
     return { x: gx, y: gy };
   };
 
+  const intactEdges = () => view.sides
+    .filter((side) => state.walls[side.i].hp > 0)
+    .map((side) => ({ a: side.a, b: side.b, i: side.i }));
+
+  const openSides = () => view.sides.filter((side) => state.walls[side.i].hp <= 0);
+
   const canPlace = (x, y) => {
-    if (!pointInHex(x, y, view.cx, view.cy, view.arena - WALL * 1.15)) return false;
+    if (x < 36 || y < 36 || x > view.w - 36 || y > view.h - 36) return false;
+    if (Math.hypot(x - view.cx, y - view.cy) > view.fieldR) return false;
     if (Math.hypot(x - view.cx, y - view.cy) < view.baseR + 22) return false;
-    const wall = nearestEdge(x, y, view.walls);
+    const wall = nearestEdge(x, y, intactEdges());
     if (wall && wall.dist < WALL * 0.85) return false;
     return !state.turrets.some((t) => Math.hypot(t.x - x, t.y - y) < CELL * 0.72);
   };
@@ -246,8 +259,10 @@ export function startGame(canvas, hooks = {}) {
     state.shots = [];
     state.pops = [];
     state.ticks = [];
+    state.walls = makeWalls();
+    state.spawned = 0;
     if (ui.pause) ui.pause.textContent = "Pause";
-    if (ui.hint) ui.hint.textContent = "Pick a shape, then click inside the hex to place it.";
+    if (ui.hint) ui.hint.textContent = "Place shapes in or around the hex. Breakers chew the brass — slowly.";
     hooks.onReset?.();
     syncHud();
   };
@@ -256,22 +271,55 @@ export function startGame(canvas, hooks = {}) {
     state.phase = "wave";
     state.toSpawn = 8 + state.wave * 4;
     state.spawnLeft = 0.15;
-    if (ui.hint) ui.hint.textContent = `Wave ${state.wave} — hold the inner hex.`;
+    if (ui.hint) ui.hint.textContent = `Wave ${state.wave} — hold the hex. Watch the walls.`;
+  };
+
+  const spawnAtSide = (side, along) => {
+    const tx = side.b.x - side.a.x;
+    const ty = side.b.y - side.a.y;
+    const len = Math.hypot(tx, ty) || 1;
+    return {
+      x: side.mx + side.nx * (view.arena * 0.42) + (tx / len) * along,
+      y: side.my + side.ny * (view.arena * 0.42) + (ty / len) * along,
+    };
   };
 
   const spawnEnemy = () => {
-    const jitter = (Math.random() - 0.5) * 46;
-    const tx = view.gapB.x - view.gapA.x;
-    const ty = view.gapB.y - view.gapA.y;
-    const len = Math.hypot(tx, ty) || 1;
-    state.enemies.push({
-      x: view.spawn.x + (tx / len) * jitter,
-      y: view.spawn.y + (ty / len) * jitter,
-      hp: 8 + state.wave * 3.2,
-      max: 8 + state.wave * 3.2,
-      speed: 46 + state.wave * 3.4,
-      atBase: false,
-    });
+    const intact = view.sides.filter((side) => state.walls[side.i].hp > 0);
+    const open = openSides();
+    const gate = open[Math.floor(Math.random() * open.length)] ?? view.sides[OPEN_EDGE];
+    const wantBreaker = intact.length > 0 && (state.spawned % 5 === 3 || (state.wave >= 3 && Math.random() < 0.16));
+    const along = (Math.random() - 0.5) * 52;
+    if (wantBreaker) {
+      const wall = intact[Math.floor(Math.random() * intact.length)];
+      const at = spawnAtSide(wall, along);
+      state.enemies.push({
+        role: "breaker",
+        wall: wall.i,
+        x: at.x,
+        y: at.y,
+        hp: 16 + state.wave * 4.2,
+        max: 16 + state.wave * 4.2,
+        speed: 30 + state.wave * 1.8,
+        chew: CHEW + state.wave * 0.28,
+        atBase: false,
+        chewing: false,
+      });
+    } else {
+      const at = spawnAtSide(gate, along);
+      state.enemies.push({
+        role: "runner",
+        wall: gate.i,
+        x: at.x,
+        y: at.y,
+        hp: 8 + state.wave * 3.2,
+        max: 8 + state.wave * 3.2,
+        speed: 46 + state.wave * 3.4,
+        atBase: false,
+        chewing: false,
+      });
+    }
+    state.spawned += 1;
   };
 
   const syncHud = () => {
@@ -286,14 +334,65 @@ export function startGame(canvas, hooks = {}) {
     });
   };
 
+  const breachWall = (index) => {
+    const wall = state.walls[index];
+    if (!wall || wall.hp > 0) return;
+    const side = view.sides[index];
+    state.pops.push({ x: side.mx, y: side.my, life: 0.7, r: 22 });
+    if (ui.hint) ui.hint.textContent = "A wall gave way. They can come through that side now.";
+  };
+
+  const chewWall = (enemy, dt) => {
+    const wall = state.walls[enemy.wall];
+    if (!wall || wall.hp <= 0) {
+      enemy.role = "runner";
+      enemy.chewing = false;
+      return;
+    }
+    wall.hp = Math.max(0, wall.hp - enemy.chew * dt);
+    wall.flash = 0.16;
+    enemy.chewing = true;
+    if (wall.hp <= 0) breachWall(enemy.wall);
+  };
+
   const steer = (enemy, dt) => {
+    const edges = intactEdges();
+    enemy.chewing = false;
+
+    if (enemy.role === "breaker") {
+      const wall = state.walls[enemy.wall];
+      const side = view.sides[enemy.wall];
+      if (!wall || wall.hp <= 0 || !side) {
+        enemy.role = "runner";
+      } else {
+        const hit = distToSegment(enemy.x, enemy.y, side.a.x, side.a.y, side.b.x, side.b.y);
+        if (hit.dist < WALL * 0.5 + ENEMY_R + 12) {
+          chewWall(enemy, dt);
+          const alongX = side.b.x - side.a.x;
+          const alongY = side.b.y - side.a.y;
+          const alen = Math.hypot(alongX, alongY) || 1;
+          enemy.x += (alongX / alen) * Math.sin(performance.now() / 180 + enemy.wall) * 8 * dt;
+          enemy.y += (alongY / alen) * Math.sin(performance.now() / 180 + enemy.wall) * 8 * dt;
+          enemy.atBase = false;
+          return;
+        }
+        const dx = hit.x - enemy.x;
+        const dy = hit.y - enemy.y;
+        const dist = Math.hypot(dx, dy) || 1;
+        enemy.x += (dx / dist) * enemy.speed * dt;
+        enemy.y += (dy / dist) * enemy.speed * dt;
+        enemy.atBase = false;
+        return;
+      }
+    }
+
     const toBaseX = view.cx - enemy.x;
     const toBaseY = view.cy - enemy.y;
     const dist = Math.hypot(toBaseX, toBaseY) || 1;
     let vx = toBaseX / dist;
     let vy = toBaseY / dist;
 
-    const wall = nearestEdge(enemy.x, enemy.y, view.walls);
+    const wall = nearestEdge(enemy.x, enemy.y, edges);
     if (wall && wall.dist < WALL * 0.5 + ENEMY_R + 6) {
       const nlen = Math.hypot(wall.nx, wall.ny) || 1;
       const nx = wall.nx / nlen;
@@ -385,26 +484,54 @@ export function startGame(canvas, hooks = {}) {
 
   const drawWalls = () => {
     ctx.save();
-    ctx.shadowColor = "rgba(215, 176, 122, 0.28)";
-    ctx.shadowBlur = 18;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    ctx.strokeStyle = "#3a2f22";
-    ctx.lineWidth = WALL + 10;
-    ctx.beginPath();
-    for (const { a, b } of view.walls) {
-      ctx.moveTo(a.x, a.y);
-      ctx.lineTo(b.x, b.y);
+    for (const side of view.sides) {
+      const wall = state.walls[side.i];
+      if (wall.hp <= 0) continue;
+      const t = wall.hp / wall.max;
+      const flash = wall.flash > 0;
+      ctx.shadowColor = flash ? "rgba(255, 176, 96, 0.55)" : "rgba(215, 176, 122, 0.28)";
+      ctx.shadowBlur = flash ? 22 : 18;
+      ctx.strokeStyle = "#3a2f22";
+      ctx.lineWidth = WALL + 10;
+      ctx.beginPath();
+      ctx.moveTo(side.a.x, side.a.y);
+      ctx.lineTo(side.b.x, side.b.y);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = flash ? "#f0c48a" : `rgb(${Math.round(120 + 95 * t)}, ${Math.round(80 + 96 * t)}, ${Math.round(50 + 72 * t)})`;
+      ctx.lineWidth = WALL * (0.72 + 0.28 * t);
+      ctx.stroke();
+      if (t < 0.72) {
+        ctx.strokeStyle = `rgba(40, 28, 18, ${0.18 + (1 - t) * 0.45})`;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([10, 11]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      if (t < 0.38) {
+        ctx.strokeStyle = "rgba(255, 236, 205, 0.18)";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
     }
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-    ctx.strokeStyle = "#d7b07a";
-    ctx.lineWidth = WALL;
-    ctx.stroke();
-    ctx.strokeStyle = "rgba(255, 236, 205, 0.35)";
-    ctx.lineWidth = 3;
-    ctx.stroke();
     ctx.restore();
+  };
+
+  const drawApproaches = () => {
+    for (const side of openSides()) {
+      const outX = side.mx + side.nx * (view.arena * 0.42);
+      const outY = side.my + side.ny * (view.arena * 0.42);
+      ctx.fillStyle = "rgba(196, 92, 255, 0.08)";
+      ctx.beginPath();
+      ctx.moveTo(side.a.x, side.a.y);
+      ctx.lineTo(outX + (side.a.x - side.mx) * 0.2, outY + (side.a.y - side.my) * 0.2);
+      ctx.lineTo(outX + (side.b.x - side.mx) * 0.2, outY + (side.b.y - side.my) * 0.2);
+      ctx.lineTo(side.b.x, side.b.y);
+      ctx.closePath();
+      ctx.fill();
+    }
   };
 
   const drawBase = (t) => {
@@ -442,15 +569,14 @@ export function startGame(canvas, hooks = {}) {
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, view.w, view.h);
 
-    ctx.fillStyle = "rgba(196, 92, 255, 0.08)";
     ctx.beginPath();
-    ctx.moveTo(view.gapA.x, view.gapA.y);
-    ctx.lineTo(view.spawn.x + (view.gapA.x - view.gapMid.x) * 0.2, view.spawn.y + (view.gapA.y - view.gapMid.y) * 0.2);
-    ctx.lineTo(view.spawn.x + (view.gapB.x - view.gapMid.x) * 0.2, view.spawn.y + (view.gapB.y - view.gapMid.y) * 0.2);
-    ctx.lineTo(view.gapB.x, view.gapB.y);
-    ctx.closePath();
-    ctx.fill();
+    ctx.strokeStyle = "rgba(215, 176, 122, 0.12)";
+    ctx.setLineDash([5, 9]);
+    ctx.arc(view.cx, view.cy, view.fieldR, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
 
+    drawApproaches();
     drawWalls();
     drawBase(t);
 
@@ -486,16 +612,27 @@ export function startGame(canvas, hooks = {}) {
     }
 
     for (const enemy of state.enemies) {
+      const breaker = enemy.role === "breaker";
+      const r = breaker ? ENEMY_R + 2.2 : ENEMY_R;
       ctx.beginPath();
-      ctx.fillStyle = enemy.atBase ? "#e8a0ff" : "#c45cff";
-      ctx.shadowColor = "rgba(196, 92, 255, 0.5)";
+      ctx.fillStyle = breaker
+        ? (enemy.chewing ? "#e39a4a" : "#c46a32")
+        : (enemy.atBase ? "#e8a0ff" : "#c45cff");
+      ctx.shadowColor = breaker ? "rgba(227, 154, 74, 0.5)" : "rgba(196, 92, 255, 0.5)";
       ctx.shadowBlur = 10;
-      ctx.arc(enemy.x, enemy.y, ENEMY_R, 0, Math.PI * 2);
+      if (breaker) {
+        ctx.moveTo(enemy.x, enemy.y - r);
+        ctx.lineTo(enemy.x + r * 0.92, enemy.y + r * 0.7);
+        ctx.lineTo(enemy.x - r * 0.92, enemy.y + r * 0.7);
+        ctx.closePath();
+      } else {
+        ctx.arc(enemy.x, enemy.y, r, 0, Math.PI * 2);
+      }
       ctx.fill();
       ctx.shadowBlur = 0;
       ctx.fillStyle = "rgba(0,0,0,0.35)";
       ctx.fillRect(enemy.x - 8, enemy.y - 14, 16, 2);
-      ctx.fillStyle = "#7ad4ff";
+      ctx.fillStyle = breaker ? "#e08a4a" : "#7ad4ff";
       ctx.fillRect(enemy.x - 8, enemy.y - 14, 16 * Math.max(0, enemy.hp / enemy.max), 2);
     }
 
@@ -587,6 +724,7 @@ export function startGame(canvas, hooks = {}) {
         n.y -= 18 * dt;
       }
       state.ticks = state.ticks.filter((n) => n.life > 0);
+      for (const wall of state.walls) wall.flash = Math.max(0, wall.flash - dt);
       syncHud();
     }
 

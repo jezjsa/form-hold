@@ -18,6 +18,18 @@ export function hexEdges(points, skipIndex) {
   return edges;
 }
 
+export function hexSides(points, cx, cy) {
+  return points.map((a, i) => {
+    const b = points[(i + 1) % 6];
+    const mx = (a.x + b.x) / 2;
+    const my = (a.y + b.y) / 2;
+    const ox = mx - cx;
+    const oy = my - cy;
+    const len = Math.hypot(ox, oy) || 1;
+    return { i, a, b, mx, my, nx: ox / len, ny: oy / len };
+  });
+}
+
 export function pointInHex(px, py, cx, cy, radius, rotation = Math.PI / 6) {
   const dx = px - cx;
   const dy = py - cy;
