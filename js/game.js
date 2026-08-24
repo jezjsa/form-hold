@@ -596,6 +596,42 @@ export function startGame(canvas, hooks = {}) {
     if (ui.hint) ui.hint.textContent = "A wall gave way. They can come through that side now.";
   };
 
+  const coreOf = (x, y) => {
+    const dx = x - view.cx;
+    const dy = y - view.cy;
+    const dist = Math.hypot(dx, dy) || 0.001;
+    return { dx, dy, dist };
+  };
+
+  const sitR = () => view.baseR + ENEMY_R * 0.35;
+  const holeR = () => view.baseR * 0.4;
+  const aroundR = () => view.baseR + ENEMY_R + 10;
+
+  const holdOffCore = (enemy, minR) => {
+    const { dx, dy, dist } = coreOf(enemy.x, enemy.y);
+    if (dist >= minR) return;
+    enemy.x = view.cx + (dx / dist) * minR;
+    enemy.y = view.cy + (dy / dist) * minR;
+  };
+
+  const parkOnCore = (enemy, dt) => {
+    const spread = separateRunners(enemy);
+    const { dx, dy, dist } = coreOf(enemy.x, enemy.y);
+    const rx = dx / dist;
+    const ry = dy / dist;
+    const radial = spread.x * rx + spread.y * ry;
+    enemy.x += (spread.x - radial * rx) * 22 * dt;
+    enemy.y += (spread.y - radial * ry) * 22 * dt;
+    holdOffCore(enemy, holeR());
+    const after = coreOf(enemy.x, enemy.y);
+    if (after.dist > sitR()) {
+      enemy.x = view.cx + (after.dx / after.dist) * sitR();
+      enemy.y = view.cy + (after.dy / after.dist) * sitR();
+    }
+    enemy.atBase = true;
+    enemy.chewing = false;
+  };
+
   const chewWall = (enemy, dt) => {
     const wall = state.walls[enemy.wall];
     if (!wall || wall.hp <= 0) {
@@ -635,6 +671,7 @@ export function startGame(canvas, hooks = {}) {
         const dist = Math.hypot(dx, dy) || 1;
         enemy.x += (dx / dist) * enemy.speed * dt;
         enemy.y += (dy / dist) * enemy.speed * dt;
+        holdOffCore(enemy, aroundR());
         enemy.atBase = false;
         return;
       }
@@ -648,8 +685,13 @@ export function startGame(canvas, hooks = {}) {
     let vx = toBaseX / dist;
     let vy = toBaseY / dist;
 
-    const onCore = dist < view.baseR + 16;
-    const pressed = !onCore ? nearestPressed(enemy) : null;
+    const onCore = dist <= sitR() + 2;
+    const commit = dist < view.baseR + 40;
+    if (onCore) {
+      parkOnCore(enemy, dt);
+      return;
+    }
+    const pressed = !commit ? nearestPressed(enemy) : null;
     if (pressed && enemy !== pressed) {
       commitPeel(enemy, pressed);
     }
@@ -657,7 +699,7 @@ export function startGame(canvas, hooks = {}) {
       enemy.atBase = false;
       return;
     }
-    if (!onCore && state.turrets.length) {
+    if (!commit && state.turrets.length) {
       const shy = shyOfGuns(enemy.x, enemy.y, enemy.orbit || 1);
       vx += shy.x * 0.85;
       vy += shy.y * 0.85;
@@ -666,7 +708,7 @@ export function startGame(canvas, hooks = {}) {
     watch.t += dt;
     if (watch.t > 0.7) {
       const moved = Math.hypot(enemy.x - watch.x, enemy.y - watch.y);
-      if (moved < 12 && !onCore) {
+      if (moved < 12 && !commit) {
         const shot = enemy.shotFrom || pressed?.shotFrom;
         if (!becomeBreaker(enemy, shot)) {
           vx = toBaseX / dist;
@@ -681,9 +723,11 @@ export function startGame(canvas, hooks = {}) {
     } else {
       enemy.watch = watch;
     }
-    const spread = separateRunners(enemy);
-    vx += spread.x * 1.2;
-    vy += spread.y * 1.2;
+    if (!commit) {
+      const spread = separateRunners(enemy);
+      vx += spread.x * 1.2;
+      vy += spread.y * 1.2;
+    }
     const n = Math.hypot(vx, vy) || 1;
     vx /= n;
     vy /= n;
@@ -706,7 +750,13 @@ export function startGame(canvas, hooks = {}) {
 
     enemy.x += vx * enemy.speed * dt;
     enemy.y += vy * enemy.speed * dt;
-    enemy.atBase = Math.hypot(enemy.x - view.cx, enemy.y - view.cy) < view.baseR + ENEMY_R;
+    holdOffCore(enemy, holeR());
+    const landed = coreOf(enemy.x, enemy.y);
+    if (landed.dist <= sitR()) {
+      parkOnCore(enemy, 0);
+      return;
+    }
+    enemy.atBase = false;
   };
 
   const fire = (turret, dt) => {
