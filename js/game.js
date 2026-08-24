@@ -253,10 +253,29 @@ export function startGame(canvas, hooks = {}) {
     syncHud();
   });
 
-  ui.pause?.addEventListener("click", () => {
+  const togglePause = () => {
     if (state.phase === "menu" || state.phase === "lost" || state.phase === "won") return;
     state.paused = !state.paused;
-    ui.pause.textContent = state.paused ? "Resume" : "Pause";
+    if (ui.pause) ui.pause.textContent = state.paused ? "Resume" : "Pause";
+  };
+
+  ui.pause?.addEventListener("click", () => {
+    togglePause();
+  });
+  window.addEventListener("keydown", (event) => {
+    if (event.repeat || event.metaKey || event.ctrlKey || event.altKey) return;
+    if (event.code !== "Space" && event.key !== " ") return;
+    const target = event.target;
+    if (
+      target instanceof HTMLInputElement
+      || target instanceof HTMLTextAreaElement
+      || target instanceof HTMLSelectElement
+      || (target instanceof HTMLElement && target.isContentEditable)
+    ) {
+      return;
+    }
+    event.preventDefault();
+    togglePause();
   });
   ui.restart?.addEventListener("click", () => {
     reset({ play: false });
