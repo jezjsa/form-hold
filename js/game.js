@@ -904,6 +904,9 @@ export function startGame(canvas, hooks = {}) {
           state.toSpawn -= 1;
           state.spawnLeft = Math.max(0.22, 0.55 - state.wave * 0.03);
         }
+      }
+
+      if (state.phase === "wave" || state.phase === "between") {
         for (const enemy of state.enemies) steer(enemy, dt);
         for (const turret of state.turrets) fire(turret, dt);
         const onBase = state.enemies.filter((e) => e.atBase).length;
@@ -916,16 +919,23 @@ export function startGame(canvas, hooks = {}) {
           }
         }
         state.enemies = state.enemies.filter((e) => !e.dead);
-        if (state.toSpawn <= 0 && state.enemies.length === 0 && state.phase === "wave") {
-          state.gold += 12 + state.wave * 2;
-          state.score += 40 + state.wave * 8;
-          if (state.wave >= state.waveCap) {
-            finish(true);
-          } else {
-            state.wave += 1;
-            state.phase = "between";
-            state.buildLeft = 6;
-            if (ui.hint) ui.hint.textContent = "Wave clear. Spend the gold before they come again.";
+      }
+
+      if (
+        state.phase === "wave"
+        && state.toSpawn <= 0
+        && state.enemies.every((enemy) => enemy.role === "breaker")
+      ) {
+        state.gold += 12 + state.wave * 2;
+        state.score += 40 + state.wave * 8;
+        if (state.wave >= state.waveCap) {
+          finish(true);
+        } else {
+          state.wave += 1;
+          state.phase = "between";
+          state.buildLeft = 6;
+          if (ui.hint) {
+            ui.hint.textContent = "Wave clear. Spend the gold before they come again.";
           }
         }
       }
