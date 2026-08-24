@@ -3,47 +3,141 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Form Hold — Hex</title>
+  <title>Form Hold</title>
   <link rel="stylesheet" href="/css/theme.css" />
 </head>
 <body>
-  <div class="shell">
-    <header class="top">
-      <div class="brand">
-        <p class="kicker">Local only</p>
-        <h1>Form Hold</h1>
-      </div>
-      <div class="meters">
-        <div class="meter">
-          <span>Wave</span>
-          <strong id="wave">1</strong>
+  <div class="page">
+    <aside class="side-rail side-rail-left" aria-label="Players and account">
+      <section class="side-card">
+        <p class="keys-kicker">Online</p>
+        <p id="online-empty" class="signup-lead">Looking for holders…</p>
+        <ul id="online-list" class="online-list"></ul>
+      </section>
+      <section class="side-card" aria-label="Account">
+        <p class="keys-kicker">Account</p>
+        <div id="account-guest">
+          <h2>Sign in</h2>
+          <p class="signup-lead">Magic link. Same Arcade Engage account as Field Rush and No Brakes.</p>
+          <form id="signup-form" class="signup-form">
+            <input id="signup-email" name="email" type="email" autocomplete="email" maxlength="120" placeholder="you@email.com" required />
+            <button type="submit" class="btn btn-primary" id="btn-signup">Send link</button>
+            <p id="signup-status" class="signup-status"></p>
+          </form>
         </div>
-        <div class="meter meter-wide">
-          <span>Base</span>
-          <div class="energy" aria-label="Base energy">
-            <i id="energy-fill"></i>
-          </div>
-          <strong id="energy-label">100</strong>
+        <div id="account-user" class="hidden">
+          <h2 id="account-name">Signed in</h2>
+          <p id="account-level" class="account-level"></p>
+          <button type="button" class="btn btn-ghost" id="btn-signout">Sign out</button>
         </div>
-        <div class="meter">
-          <span>Gold</span>
-          <strong id="gold">70</strong>
-        </div>
-      </div>
-    </header>
+      </section>
+    </aside>
 
-    <div class="stage">
-      <canvas id="game" width="1280" height="800"></canvas>
-      <p class="hint" id="hint">Pick a shape, then click inside the hex to place it.</p>
+    <div class="game-shell">
+      <header class="hud">
+        <div class="brand">
+          <div>
+            <p class="keys-kicker">Arcade Engage</p>
+            <h1>Form Hold</h1>
+            <p>Hex · Easy</p>
+          </div>
+        </div>
+        <div class="hud-right">
+          <div class="hud-actions">
+            <button type="button" class="btn btn-ghost" id="btn-mute" aria-pressed="false">Mute</button>
+            <button type="button" class="btn btn-ghost" id="btn-speed">Speed x1</button>
+            <button type="button" class="btn btn-ghost" id="btn-pause">Pause</button>
+            <button type="button" class="btn btn-ghost" id="btn-reset">Reset</button>
+          </div>
+          <div class="hud-stats">
+            <div class="stat">
+              <span class="stat-label">Lives</span>
+              <strong id="stat-lives">20</strong>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Gold</span>
+              <strong id="stat-gold">80</strong>
+            </div>
+            <div class="stat stat-score">
+              <span class="stat-label">Score</span>
+              <strong id="stat-score">0</strong>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Wave</span>
+              <strong id="stat-wave">1 / 20</strong>
+              <em class="stat-next" id="stat-next">Next: 12</em>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Mode</span>
+              <strong id="stat-mode">Easy</strong>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Online</span>
+              <strong id="stat-online">–</strong>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div class="stage-wrap">
+        <canvas id="game" width="1280" height="720"></canvas>
+        <p class="hint" id="hint">Pick a shape, then click inside the hex to place it.</p>
+      </div>
+
+      <footer class="dock">
+        <div class="shapes" id="shapes"></div>
+      </footer>
+
+      <section class="scoreboard" id="scoreboard">
+        <div class="scoreboard-head">
+          <h2>Scoreboard</h2>
+          <p id="scoreboard-status">Hex · Easy</p>
+        </div>
+        <p id="rival-line" class="rival-line">Scores post to Convex, like Field Rush, No Brakes, and Winter Walker.</p>
+        <div class="board-tabs" id="board-tabs">
+          <button type="button" class="board-tab selected" data-difficulty="easy">Easy</button>
+          <button type="button" class="board-tab" data-difficulty="medium">Medium</button>
+          <button type="button" class="board-tab" data-difficulty="hard">Hard</button>
+          <button type="button" class="board-tab" data-board="daily">Daily</button>
+        </div>
+        <div class="board-tabs" id="range-tabs">
+          <button type="button" class="board-tab selected" data-range="all">All time</button>
+          <button type="button" class="board-tab" data-range="week">This week</button>
+          <button type="button" class="board-tab" data-range="today">Today</button>
+        </div>
+        <form id="score-form" class="score-form hidden">
+          <label for="player-name">Post this hold</label>
+          <div class="score-form-row">
+            <input id="player-name" name="name" maxlength="16" minlength="2" autocomplete="nickname" placeholder="Your name" required />
+            <button type="submit" class="btn btn-primary" id="btn-post-score">Post</button>
+          </div>
+          <p id="score-status" class="signup-status"></p>
+        </form>
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Name</th>
+              <th>Difficulty</th>
+              <th>Score</th>
+              <th>Wave</th>
+              <th>Ver</th>
+              <th>When</th>
+            </tr>
+          </thead>
+          <tbody id="scoreboard-body">
+            <tr><td colspan="7">Connecting…</td></tr>
+          </tbody>
+        </table>
+      </section>
     </div>
 
-    <footer class="dock">
-      <div class="shapes" id="shapes"></div>
-      <div class="tools">
-        <button type="button" class="ghost" id="btn-pause">Pause</button>
-        <button type="button" class="ghost" id="btn-restart">Restart</button>
-      </div>
-    </footer>
+    <aside class="side-rail" aria-label="Games">
+      <section class="side-card">
+        <p class="keys-kicker">Arcade Engage</p>
+        <a class="news-more" href="https://arcade-engage.vercel.app/">Back to Games</a>
+      </section>
+    </aside>
   </div>
   <script type="module" src="/js/main.js"></script>
 </body>

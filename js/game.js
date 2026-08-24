@@ -58,26 +58,32 @@ function drawShape(ctx, kind, x, y, size, color) {
   ctx.stroke();
 }
 
-export function startGame(canvas) {
+export function startGame(canvas, hooks = {}) {
   const ctx = canvas.getContext("2d");
+  const waveCap = Number.isInteger(hooks.waveCap) ? hooks.waveCap : 20;
   const ui = {
-    wave: $("wave"),
-    gold: $("gold"),
-    energyFill: $("energy-fill"),
-    energyLabel: $("energy-label"),
     hint: $("hint"),
     shapes: $("shapes"),
     pause: $("btn-pause"),
-    restart: $("btn-restart"),
+    restart: $("btn-reset"),
+    speed: $("btn-speed"),
+    mute: $("btn-mute"),
   };
 
   const state = {
     selected: "circle",
     gold: 80,
     energy: 100,
+    score: 0,
+    kills: 0,
     wave: 1,
+    waveCap,
     phase: "build",
     paused: false,
+    muted: false,
+    speed: 1,
+    startedAt: performance.now(),
+    posted: false,
     buildLeft: 12,
     spawnLeft: 0,
     toSpawn: 0,
@@ -167,13 +173,13 @@ export function startGame(canvas) {
     state.hover = null;
   });
   canvas.addEventListener("pointerdown", (event) => {
-    if (state.phase === "lost") return;
+    if (state.phase === "lost" || state.phase === "won") return;
     const p = canvasPos(event);
     const s = snap(p.x, p.y);
     const spec = TYPES[state.selected];
     if (!canPlace(s.x, s.y)) return;
     if (state.gold < spec.cost) {
-      ui.hint.textContent = `Need ${spec.cost} gold for a ${spec.name}.`;
+      if (ui.hint) ui.hint.textContent = `Need ${spec.cost} gold for a ${spec.name}.`;
       return;
     }
     state.gold -= spec.cost;
@@ -186,19 +192,52 @@ export function startGame(canvas) {
     syncHud();
   });
 
-  ui.pause.addEventListener("click", () => {
-    if (state.phase === "lost") return;
+  ui.pause?.addEventListener("click", () => {
+    if (state.phase === "lost" || state.phase === "won") return;
     state.paused = !state.paused;
     ui.pause.textContent = state.paused ? "Resume" : "Pause";
   });
-  ui.restart.addEventListener("click", () => reset());
+  ui.restart?.addEventListener("click", () => reset());
+  ui.speed?.addEventListener("click", () => {
+    state.speed = state.speed === 1 ? 2 : state.speed === 2 ? 3 : 1;
+    ui.speed.textContent = `Speed x${state.speed}`;
+  });
+  ui.mute?.addEventListener("click", () => {
+    state.muted = !state.muted;
+    ui.mute.textContent = state.muted ? "Unmute" : "Mute";
+    ui.mute.setAttribute("aria-pressed", state.muted ? "true" : "false");
+  });
+
+  const finish = (won) => {
+    if (state.posted) return;
+    state.posted = true;
+    state.phase = won ? "won" : "lost";
+    if (won) state.score += Math.floor(state.energy) * 2 + Math.floor(state.gold / 4);
+    hooks.onOver?.({
+      score: state.score,
+      wave: state.wave,
+      won,
+      kills: state.kills,
+      durationMs: Math.max(1, Math.round(performance.now() - state.startedAt)),
+    });
+    if (ui.hint) {
+      ui.hint.textContent = won
+        ? "Hex held. Post the score to Convex."
+        : "The base ran out of energy. Post the score, or reset for another hold.";
+    }
+    syncHud();
+  };
 
   const reset = () => {
     state.gold = 80;
     state.energy = 100;
+    state.score = 0;
+    state.kills = 0;
     state.wave = 1;
     state.phase = "build";
     state.paused = false;
+    state.posted = false;
+    state.startedAt = performance.now();
     state.buildLeft = 12;
     state.spawnLeft = 0;
     state.toSpawn = 0;
@@ -207,8 +246,9 @@ export function startGame(canvas) {
     state.shots = [];
     state.pops = [];
     state.ticks = [];
-    ui.pause.textContent = "Pause";
-    ui.hint.textContent = "Pick a shape, then click inside the hex to place it.";
+    if (ui.pause) ui.pause.textContent = "Pause";
+    if (ui.hint) ui.hint.textContent = "Pick a shape, then click inside the hex to place it.";
+    hooks.onReset?.();
     syncHud();
   };
 
@@ -216,7 +256,7 @@ export function startGame(canvas) {
     state.phase = "wave";
     state.toSpawn = 8 + state.wave * 4;
     state.spawnLeft = 0.15;
-    ui.hint.textContent = `Wave ${state.wave} — hold the inner hex.`;
+    if (ui.hint) ui.hint.textContent = `Wave ${state.wave} — hold the inner hex.`;
   };
 
   const spawnEnemy = () => {
@@ -235,11 +275,15 @@ export function startGame(canvas) {
   };
 
   const syncHud = () => {
-    ui.wave.textContent = String(state.wave);
-    ui.gold.textContent = String(Math.floor(state.gold));
-    const e = Math.max(0, state.energy);
-    ui.energyLabel.textContent = String(Math.ceil(e));
-    ui.energyFill.style.transform = `scaleX(${e / 100})`;
+    hooks.onHud?.({
+      lives: Math.max(0, Math.ceil(state.energy / 5)),
+      gold: Math.floor(state.gold),
+      score: state.score,
+      wave: state.wave,
+      waveCap: state.waveCap,
+      next: state.buildLeft,
+      phase: state.phase,
+    });
   };
 
   const steer = (enemy, dt) => {
@@ -332,6 +376,8 @@ export function startGame(canvas) {
     });
     if (enemy.hp <= 0) {
       enemy.dead = true;
+      state.kills += 1;
+      state.score += 12;
       state.gold += 4 + Math.floor(state.wave * 0.6);
       state.pops.push({ x: enemy.x, y: enemy.y, life: 0.35, r: 10 });
     }
@@ -474,27 +520,27 @@ export function startGame(canvas) {
       ctx.textAlign = "start";
     }
 
-    if (state.phase === "lost") {
+    if (state.phase === "lost" || state.phase === "won") {
       ctx.fillStyle = "rgba(8,11,15,0.55)";
       ctx.fillRect(0, 0, view.w, view.h);
       ctx.fillStyle = "#f3efe6";
       ctx.textAlign = "center";
       ctx.font = "800 42px Helvetica Neue, sans-serif";
-      ctx.fillText("Base fallen", view.cx, view.cy - 10);
+      ctx.fillText(state.phase === "won" ? "Hex held" : "Base fallen", view.cx, view.cy - 10);
       ctx.font = "16px Helvetica Neue, sans-serif";
       ctx.fillStyle = "#8b93a0";
-      ctx.fillText(`Held ${state.wave} wave${state.wave === 1 ? "" : "s"}`, view.cx, view.cy + 22);
+      ctx.fillText(`${state.score.toLocaleString()} · wave ${state.wave}`, view.cx, view.cy + 22);
       ctx.textAlign = "start";
     }
   };
 
   let last = performance.now();
   const tick = (now) => {
-    const dt = Math.min(0.05, (now - last) / 1000);
+    const dt = Math.min(0.05, (now - last) / 1000) * state.speed;
     last = now;
     view = view.w !== canvas.width ? layout() : view;
 
-    if (!state.paused && state.phase !== "lost") {
+    if (!state.paused && state.phase !== "lost" && state.phase !== "won") {
       if (state.phase === "build" || state.phase === "between") {
         state.buildLeft -= dt;
         if (state.buildLeft <= 0) startWave();
@@ -514,17 +560,21 @@ export function startGame(canvas) {
           state.energy -= onBase * 3.4 * dt;
           if (state.energy <= 0) {
             state.energy = 0;
-            state.phase = "lost";
-            ui.hint.textContent = "The base ran out of energy. Restart to try the hex again.";
+            finish(false);
           }
         }
         state.enemies = state.enemies.filter((e) => !e.dead);
         if (state.toSpawn <= 0 && state.enemies.length === 0 && state.phase === "wave") {
           state.gold += 12 + state.wave * 2;
-          state.wave += 1;
-          state.phase = "between";
-          state.buildLeft = 6;
-          ui.hint.textContent = "Wave clear. Spend the gold before they come again.";
+          state.score += 40 + state.wave * 8;
+          if (state.wave >= state.waveCap) {
+            finish(true);
+          } else {
+            state.wave += 1;
+            state.phase = "between";
+            state.buildLeft = 6;
+            if (ui.hint) ui.hint.textContent = "Wave clear. Spend the gold before they come again.";
+          }
         }
       }
 
