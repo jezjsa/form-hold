@@ -388,9 +388,10 @@ export function startGame(canvas, hooks = {}) {
         atBase: false,
         chewing: false,
         orbit: Math.random() < 0.5 ? 1 : -1,
+        lane: (Math.random() - 0.45) * 56,
       });
     } else {
-      const at = spawnAtSide(gate, along);
+      const at = spawnAtSide(gate, along * 1.35);
       state.enemies.push({
         role: "runner",
         wall: gate.i,
@@ -398,10 +399,11 @@ export function startGame(canvas, hooks = {}) {
         y: at.y,
         hp: 8 + state.wave * 3.2,
         max: 8 + state.wave * 3.2,
-        speed: 46 + state.wave * 3.4,
+        speed: 46 + state.wave * 3.4 + (Math.random() - 0.5) * 8,
         atBase: false,
         chewing: false,
         orbit: Math.random() < 0.5 ? 1 : -1,
+        lane: (Math.random() - 0.45) * 56,
       });
     }
     state.spawned += 1;
@@ -492,8 +494,10 @@ export function startGame(canvas, hooks = {}) {
       return { x: (view.cx - enemy.x) / dist, y: (view.cy - enemy.y) / dist, dive: true };
     }
     const fromGuns = wrapAngle(eAng - gAng);
-    const turn = Math.abs(fromGuns) < 0.2 ? (enemy.orbit || 1) : (fromGuns >= 0 ? 1 : -1);
-    const holdR = view.baseR + 34 + Math.max(0, hot) * view.arena * 0.46;
+    const geo = fromGuns >= 0 ? 1 : -1;
+    const personal = enemy.orbit || 1;
+    const turn = Math.abs(fromGuns) > 1.1 ? geo : personal;
+    const holdR = view.baseR + 34 + Math.max(0, hot) * view.arena * 0.46 + (enemy.lane || 0);
     const tx = -Math.sin(eAng) * turn;
     const ty = Math.cos(eAng) * turn;
     const radial = Math.max(-0.4, Math.min(0.7, (holdR - dist) / (view.arena * 0.22)));
@@ -502,6 +506,87 @@ export function startGame(canvas, hooks = {}) {
       y: ty + Math.sin(eAng) * radial,
       dive: false,
     };
+  };
+
+  const separateRunners = (enemy) => {
+    let ox = 0;
+    let oy = 0;
+    for (const other of state.enemies) {
+      if (other === enemy || other.role === "breaker" || other.dead) continue;
+      const dx = enemy.x - other.x;
+      const dy = enemy.y - other.y;
+      const d = Math.hypot(dx, dy);
+      if (d <= 0 || d > 42) continue;
+      const w = 1 - d / 42;
+      const tight = d < 16 ? 2.1 : 1;
+      ox += (dx / d) * w * tight;
+      oy += (dy / d) * w * tight;
+      if (d < 18) {
+        const side = enemy.orbit || 1;
+        ox += (-dy / d) * side * 1.4;
+        oy += (dx / d) * side * 1.4;
+      }
+    }
+    return { x: ox, y: oy };
+  };
+
+  const nearestPressed = (enemy) => {
+    let best = null;
+    let bestD = 180;
+    for (const other of state.enemies) {
+      if (other === enemy || other.dead || (other.underFire || 0) <= 0) continue;
+      const d = Math.hypot(other.x - enemy.x, other.y - enemy.y);
+      if (d < bestD) {
+        bestD = d;
+        best = other;
+      }
+    }
+    return best;
+  };
+
+  const peelTowardCore = (enemy, pressed) => {
+    const toCoreX = view.cx - enemy.x;
+    const toCoreY = view.cy - enemy.y;
+    const dist = Math.hypot(toCoreX, toCoreY) || 1;
+    let vx = (toCoreX / dist) * 0.45;
+    let vy = (toCoreY / dist) * 0.45;
+    const shot = pressed.shotFrom;
+    const orbit = enemy.orbit || 1;
+    if (shot) {
+      const sx = enemy.x - shot.x;
+      const sy = enemy.y - shot.y;
+      const sd = Math.hypot(sx, sy) || 1;
+      const danger = 170;
+      if (sd < danger) {
+        const w = 1 - sd / danger;
+        vx += (sx / sd) * (1.1 + w * 1.6);
+        vy += (sy / sd) * (1.1 + w * 1.6);
+        vx += (-sy / sd) * orbit * (1.8 + Math.abs(enemy.lane || 0) * 0.02);
+        vy += (sx / sd) * orbit * (1.8 + Math.abs(enemy.lane || 0) * 0.02);
+      }
+    }
+    const dx = enemy.x - pressed.x;
+    const dy = enemy.y - pressed.y;
+    const pd = Math.hypot(dx, dy) || 1;
+    vx += (dx / pd) * 1.9;
+    vy += (dy / pd) * 1.9;
+    if (pd < 22) {
+      vx += (-dy / pd) * orbit * 2.4;
+      vy += (dx / pd) * orbit * 2.4;
+    }
+    return { x: vx, y: vy };
+  };
+
+  const commitPeel = (enemy, pressed) => {
+    if (enemy.peeling) return;
+    enemy.peeling = true;
+    const side = (enemy.x - pressed.x) * (pressed.shotFrom?.y - pressed.y || 0)
+      - (enemy.y - pressed.y) * (pressed.shotFrom?.x - pressed.x || 0);
+    if (Math.abs(side) > 4) {
+      enemy.orbit = side >= 0 ? 1 : -1;
+    }
+    const sign = enemy.orbit || 1;
+    enemy.lane = sign * (Math.abs(enemy.lane || 16) + 26 + Math.random() * 18);
   };
 
   const breachWall = (index) => {
@@ -556,6 +641,8 @@ export function startGame(canvas, hooks = {}) {
       }
     }
 
+    enemy.underFire = Math.max(0, (enemy.underFire || 0) - dt);
+
     const toBaseX = view.cx - enemy.x;
     const toBaseY = view.cy - enemy.y;
     const dist = Math.hypot(toBaseX, toBaseY) || 1;
@@ -565,7 +652,13 @@ export function startGame(canvas, hooks = {}) {
     const inYard = dist < view.arena - WALL * 0.1
       || pointInHex(enemy.x, enemy.y, view.cx, view.cy, view.arena - WALL * 0.2);
     const onCore = dist < view.baseR + 16;
-    if (inYard && !onCore && state.turrets.length) {
+    const pressed = !onCore ? nearestPressed(enemy) : null;
+    if (pressed && enemy !== pressed) {
+      commitPeel(enemy, pressed);
+      const peel = peelTowardCore(enemy, pressed);
+      vx = peel.x;
+      vy = peel.y;
+    } else if (inYard && !onCore && state.turrets.length) {
       const flank = flankAroundGuns(enemy);
       if (flank) {
         vx = flank.x;
@@ -575,11 +668,14 @@ export function startGame(canvas, hooks = {}) {
           vx += shy.x;
           vy += shy.y;
         }
-        const n = Math.hypot(vx, vy) || 1;
-        vx /= n;
-        vy /= n;
       }
     }
+    const spread = separateRunners(enemy);
+    vx += spread.x * 1.8;
+    vy += spread.y * 1.8;
+    const n = Math.hypot(vx, vy) || 1;
+    vx /= n;
+    vy /= n;
 
     const wall = nearestEdge(enemy.x, enemy.y, edges);
     if (wall && wall.dist < WALL * 0.5 + ENEMY_R + 6) {
@@ -590,8 +686,11 @@ export function startGame(canvas, hooks = {}) {
       enemy.x += nx * push;
       enemy.y += ny * push;
       const slide = vx * -ny + vy * nx;
-      vx = -ny * Math.sign(slide || 1);
-      vy = nx * Math.sign(slide || 1);
+      const alongX = -ny * Math.sign(slide || enemy.orbit || 1);
+      const alongY = nx * Math.sign(slide || enemy.orbit || 1);
+      const leave = enemy.peeling ? 0.62 : 0.28;
+      vx = alongX * (1 - leave) + vx * leave;
+      vy = alongY * (1 - leave) + vy * leave;
     }
 
     enemy.x += vx * enemy.speed * dt;
@@ -656,6 +755,8 @@ export function startGame(canvas, hooks = {}) {
 
   const hurt = (enemy, amount, ox, oy) => {
     enemy.hp -= amount;
+    enemy.underFire = 0.9;
+    enemy.shotFrom = { x: ox, y: oy };
     state.ticks.push({
       x: enemy.x,
       y: enemy.y - 10,
