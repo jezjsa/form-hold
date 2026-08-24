@@ -456,13 +456,6 @@ export function startGame(canvas, hooks = {}) {
     });
   };
 
-  const wrapAngle = (a) => {
-    let x = a;
-    while (x > Math.PI) x -= Math.PI * 2;
-    while (x < -Math.PI) x += Math.PI * 2;
-    return x;
-  };
-
   const gunCentroid = () => {
     if (!state.turrets.length) return null;
     let x = 0;
@@ -495,41 +488,16 @@ export function startGame(canvas, hooks = {}) {
       const dx = x - guns.x;
       const dy = y - guns.y;
       const d = Math.hypot(dx, dy) || 1;
-      const blob = 78;
+      const blob = 44;
       if (d < blob) {
         const w = 1 - d / blob;
         const tx = -dy / d;
         const ty = dx / d;
-        ox += (dx / d) * w * 2.2 + tx * orbit * w * 1.15;
-        oy += (dy / d) * w * 2.2 + ty * orbit * w * 1.15;
+        ox += (dx / d) * w * 1.1 + tx * orbit * w * 0.7;
+        oy += (dy / d) * w * 1.1 + ty * orbit * w * 0.7;
       }
     }
     return { x: ox, y: oy };
-  };
-
-  const flankAroundGuns = (enemy) => {
-    const guns = gunCentroid();
-    if (!guns) return null;
-    const eAng = Math.atan2(enemy.y - view.cy, enemy.x - view.cx);
-    const gAng = Math.atan2(guns.y - view.cy, guns.x - view.cx);
-    const dist = Math.hypot(enemy.x - view.cx, enemy.y - view.cy) || 1;
-    const hot = Math.cos(eAng - gAng);
-    if (hot < -0.18 && dist < view.baseR + 70) {
-      return { x: (view.cx - enemy.x) / dist, y: (view.cy - enemy.y) / dist, dive: true };
-    }
-    const fromGuns = wrapAngle(eAng - gAng);
-    const geo = fromGuns >= 0 ? 1 : -1;
-    const personal = enemy.orbit || 1;
-    const turn = Math.abs(fromGuns) > 1.1 ? geo : personal;
-    const holdR = view.baseR + 34 + Math.max(0, hot) * view.arena * 0.46 + (enemy.lane || 0);
-    const tx = -Math.sin(eAng) * turn;
-    const ty = Math.cos(eAng) * turn;
-    const radial = Math.max(-0.4, Math.min(0.7, (holdR - dist) / (view.arena * 0.22)));
-    return {
-      x: tx + Math.cos(eAng) * radial,
-      y: ty + Math.sin(eAng) * radial,
-      dive: false,
-    };
   };
 
   const separateRunners = (enemy) => {
@@ -568,51 +536,22 @@ export function startGame(canvas, hooks = {}) {
     return best;
   };
 
-  const peelTowardCore = (enemy, pressed) => {
-    const toCoreX = view.cx - enemy.x;
-    const toCoreY = view.cy - enemy.y;
-    const dist = Math.hypot(toCoreX, toCoreY) || 1;
-    let vx = (toCoreX / dist) * 0.75;
-    let vy = (toCoreY / dist) * 0.75;
-    const shot = pressed.shotFrom;
-    const orbit = enemy.orbit || 1;
-    if (shot) {
-      const sx = enemy.x - shot.x;
-      const sy = enemy.y - shot.y;
-      const sd = Math.hypot(sx, sy) || 1;
-      const danger = 170;
-      if (sd < danger) {
-        const w = 1 - sd / danger;
-        vx += (sx / sd) * w * 0.4;
-        vy += (sy / sd) * w * 0.4;
-        vx += (-sy / sd) * orbit * (2.1 + Math.abs(enemy.lane || 0) * 0.02);
-        vy += (sx / sd) * orbit * (2.1 + Math.abs(enemy.lane || 0) * 0.02);
-      }
-    }
-    const dx = enemy.x - pressed.x;
-    const dy = enemy.y - pressed.y;
-    const pd = Math.hypot(dx, dy) || 1;
-    vx += (dx / pd) * 1.9;
-    vy += (dy / pd) * 1.9;
-    if (pd < 22) {
-      vx += (-dy / pd) * orbit * 2.4;
-      vy += (dx / pd) * orbit * 2.4;
-    }
-    return { x: vx, y: vy };
-  };
-
   const pickSafeWall = (enemy, shot) => {
     const intact = view.sides.filter((side) => state.walls[side.i].hp > 0);
     if (!intact.length) return null;
+    const inside = pointInHex(enemy.x, enemy.y, view.cx, view.cy, view.arena - 2)
+      || Math.hypot(enemy.x - view.cx, enemy.y - view.cy) < view.arena * 0.94;
     let best = null;
     let bestScore = -Infinity;
     for (const side of intact) {
+      const travel = Math.hypot(side.mx - enemy.x, side.my - enemy.y);
+      const already = state.enemies.filter((other) => other.role === "breaker" && other.wall === side.i).length;
       const fromGun = shot
         ? Math.hypot(side.mx - shot.x, side.my - shot.y)
         : 80;
-      const travel = Math.hypot(side.mx - enemy.x, side.my - enemy.y);
-      const already = state.enemies.filter((other) => other.role === "breaker" && other.wall === side.i).length;
-      const score = fromGun - travel * 0.22 - already * 40;
+      const score = inside
+        ? -travel - already * 28
+        : fromGun - travel * 0.22 - already * 40;
       if (score > bestScore) {
         bestScore = score;
         best = side;
@@ -627,40 +566,12 @@ export function startGame(canvas, hooks = {}) {
     if (!side) return false;
     enemy.role = "breaker";
     enemy.wall = side.i;
-    enemy.egress = pointInHex(enemy.x, enemy.y, view.cx, view.cy, view.arena - 2)
-      || Math.hypot(enemy.x - view.cx, enemy.y - view.cy) < view.arena * 0.94;
+    enemy.egress = false;
     enemy.chew = CHEW + threatOf(state.wave) * 0.28;
     enemy.chewing = false;
     enemy.peeling = false;
     enemy.atBase = false;
     return true;
-  };
-
-  const leaveHex = (enemy) => {
-    const open = openSides();
-    if (open.length) {
-      let gate = open[0];
-      let best = Infinity;
-      for (const side of open) {
-        const midX = (side.mx + enemy.x) * 0.5;
-        const midY = (side.my + enemy.y) * 0.5;
-        const travel = Math.hypot(side.mx - enemy.x, side.my - enemy.y);
-        const gunPen = enemy.shotFrom
-          ? Math.hypot(midX - enemy.shotFrom.x, midY - enemy.shotFrom.y)
-          : 90;
-        const score = travel - gunPen * 0.45;
-        if (score < best) {
-          best = score;
-          gate = side;
-        }
-      }
-      return {
-        x: gate.mx + gate.nx * (view.arena * 0.24) - enemy.x,
-        y: gate.my + gate.ny * (view.arena * 0.24) - enemy.y,
-      };
-    }
-    const dist = Math.hypot(enemy.x - view.cx, enemy.y - view.cy) || 1;
-    return { x: enemy.x - view.cx, y: enemy.y - view.cy };
   };
 
   const commitPeel = (enemy, pressed) => {
@@ -703,30 +614,6 @@ export function startGame(canvas, hooks = {}) {
     enemy.chewing = false;
 
     if (enemy.role === "breaker") {
-      if (enemy.egress) {
-        const dist = Math.hypot(enemy.x - view.cx, enemy.y - view.cy);
-        const outside = dist > view.arena + 8
-          && !pointInHex(enemy.x, enemy.y, view.cx, view.cy, view.arena + 2);
-        if (outside) {
-          enemy.egress = false;
-        } else {
-          const leave = leaveHex(enemy);
-          let vx = leave.x;
-          let vy = leave.y;
-          if (enemy.shotFrom) {
-            const sx = enemy.x - enemy.shotFrom.x;
-            const sy = enemy.y - enemy.shotFrom.y;
-            const sd = Math.hypot(sx, sy) || 1;
-            vx += (sx / sd) * 0.8;
-            vy += (sy / sd) * 0.8;
-          }
-          const n = Math.hypot(vx, vy) || 1;
-          enemy.x += (vx / n) * enemy.speed * dt;
-          enemy.y += (vy / n) * enemy.speed * dt;
-          enemy.atBase = false;
-          return;
-        }
-      }
       const wall = state.walls[enemy.wall];
       const side = view.sides[enemy.wall];
       if (!wall || wall.hp <= 0 || !side) {
@@ -761,30 +648,42 @@ export function startGame(canvas, hooks = {}) {
     let vx = toBaseX / dist;
     let vy = toBaseY / dist;
 
-    const inYard = dist < view.arena - WALL * 0.1
-      || pointInHex(enemy.x, enemy.y, view.cx, view.cy, view.arena - WALL * 0.2);
     const onCore = dist < view.baseR + 16;
     const pressed = !onCore ? nearestPressed(enemy) : null;
     if (pressed && enemy !== pressed) {
       commitPeel(enemy, pressed);
-      const peel = peelTowardCore(enemy, pressed);
-      vx = peel.x;
-      vy = peel.y;
-    } else if (inYard && !onCore && state.turrets.length) {
-      const flank = flankAroundGuns(enemy);
-      if (flank) {
-        vx = flank.x;
-        vy = flank.y;
-        if (!flank.dive) {
-          const shy = shyOfGuns(enemy.x, enemy.y, enemy.orbit || 1);
-          vx += shy.x;
-          vy += shy.y;
+    }
+    if (enemy.role === "breaker") {
+      enemy.atBase = false;
+      return;
+    }
+    if (!onCore && state.turrets.length) {
+      const shy = shyOfGuns(enemy.x, enemy.y, enemy.orbit || 1);
+      vx += shy.x * 0.85;
+      vy += shy.y * 0.85;
+    }
+    const watch = enemy.watch || { x: enemy.x, y: enemy.y, t: 0 };
+    watch.t += dt;
+    if (watch.t > 0.7) {
+      const moved = Math.hypot(enemy.x - watch.x, enemy.y - watch.y);
+      if (moved < 12 && !onCore) {
+        const shot = enemy.shotFrom || pressed?.shotFrom;
+        if (!becomeBreaker(enemy, shot)) {
+          vx = toBaseX / dist;
+          vy = toBaseY / dist;
+        } else {
+          enemy.watch = { x: enemy.x, y: enemy.y, t: 0 };
+          enemy.atBase = false;
+          return;
         }
       }
+      enemy.watch = { x: enemy.x, y: enemy.y, t: 0 };
+    } else {
+      enemy.watch = watch;
     }
     const spread = separateRunners(enemy);
-    vx += spread.x * 1.8;
-    vy += spread.y * 1.8;
+    vx += spread.x * 1.2;
+    vy += spread.y * 1.2;
     const n = Math.hypot(vx, vy) || 1;
     vx /= n;
     vy /= n;
@@ -912,59 +811,40 @@ export function startGame(canvas, hooks = {}) {
       const flash = wall.flash > 0;
       const tone = wallTone(t, flash);
       ctx.shadowColor = flash ? rgb(tone, 0.55) : "rgba(215, 176, 122, 0.28)";
-      ctx.shadowBlur = flash ? 22 : 18;
-      ctx.strokeStyle = "rgba(90, 70, 46, 0.88)";
-      ctx.lineWidth = WALL + 8;
+      ctx.shadowBlur = flash ? 22 : 16;
+      ctx.strokeStyle = rgb(tone);
+      ctx.lineWidth = WALL;
       ctx.beginPath();
       ctx.moveTo(side.a.x, side.a.y);
       ctx.lineTo(side.b.x, side.b.y);
       ctx.stroke();
       ctx.shadowBlur = 0;
+
       const dxw = side.b.x - side.a.x;
       const dyw = side.b.y - side.a.y;
-      const eat = (1 - t) * 0.5;
+      const along = Math.hypot(dxw, dyw) || 1;
+      const ux = dxw / along;
+      const uy = dyw / along;
+      const bar = 16;
+      const mx = side.mx - side.nx * (WALL * 1.15);
+      const my = side.my - side.ny * (WALL * 1.15);
+      const sx = mx - ux * bar * 0.5;
+      const sy = my - uy * bar * 0.5;
+      const ex = mx + ux * bar * 0.5;
+      const ey = my + uy * bar * 0.5;
       ctx.beginPath();
-      ctx.strokeStyle = rgb(tone);
-      ctx.lineWidth = WALL * (0.78 + 0.22 * t);
-      ctx.moveTo(side.a.x + dxw * eat, side.a.y + dyw * eat);
-      ctx.lineTo(side.b.x - dxw * eat, side.b.y - dyw * eat);
-      ctx.stroke();
-
-      const inset = WALL * 1.72;
-      const ax = side.a.x - side.nx * inset;
-      const ay = side.a.y - side.ny * inset;
-      const bx = side.b.x - side.nx * inset;
-      const by = side.b.y - side.ny * inset;
-      const dx = bx - ax;
-      const dy = by - ay;
-      const len = Math.hypot(dx, dy) || 1;
-      const pad = Math.min(18, len * 0.12) / len;
-      const sx = ax + dx * pad;
-      const sy = ay + dy * pad;
-      const ex = bx - dx * pad;
-      const ey = by - dy * pad;
-      ctx.beginPath();
-      ctx.strokeStyle = "rgba(8,11,15,0.72)";
-      ctx.lineWidth = 5.4;
-      ctx.moveTo(sx, sy);
-      ctx.lineTo(ex, ey);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.strokeStyle = "rgba(243,239,230,0.32)";
-      ctx.lineWidth = 4;
+      ctx.strokeStyle = "rgba(8,11,15,0.78)";
+      ctx.lineWidth = 3;
       ctx.moveTo(sx, sy);
       ctx.lineTo(ex, ey);
       ctx.stroke();
       if (t > 0.02) {
         ctx.beginPath();
-        ctx.strokeStyle = rgb(tone);
-        ctx.lineWidth = flash ? 4.2 : 3.4;
-        ctx.shadowColor = rgb(tone, 0.45);
-        ctx.shadowBlur = flash ? 10 : 4;
+        ctx.strokeStyle = rgb(tone, 0.95);
+        ctx.lineWidth = flash ? 2.8 : 2.2;
         ctx.moveTo(sx, sy);
         ctx.lineTo(sx + (ex - sx) * t, sy + (ey - sy) * t);
         ctx.stroke();
-        ctx.shadowBlur = 0;
       }
     }
     ctx.restore();
