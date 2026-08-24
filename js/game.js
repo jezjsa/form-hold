@@ -11,7 +11,7 @@ const TYPES = {
     range: 118,
     rate: 6.2,
     damage: 3.2,
-    color: "#5ee0c8",
+    color: "#e08a4a",
     blurb: "Fast pulses",
   },
   square: {
@@ -20,7 +20,7 @@ const TYPES = {
     range: 156,
     rate: 1.35,
     damage: 16,
-    color: "#8ec5ff",
+    color: "#7aa2ff",
     blurb: "Heavy shot",
   },
   triangle: {
@@ -30,7 +30,7 @@ const TYPES = {
     rate: 2.1,
     damage: 7,
     pierce: 3,
-    color: "#f0c36a",
+    color: "#c6e36a",
     blurb: "Pierces a line",
   },
 };
@@ -339,11 +339,11 @@ export function startGame(canvas) {
 
   const drawWalls = () => {
     ctx.save();
-    ctx.shadowColor = "rgba(94, 224, 200, 0.35)";
-    ctx.shadowBlur = 22;
+    ctx.shadowColor = "rgba(215, 176, 122, 0.28)";
+    ctx.shadowBlur = 18;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    ctx.strokeStyle = "#1c3f3c";
+    ctx.strokeStyle = "#3a2f22";
     ctx.lineWidth = WALL + 10;
     ctx.beginPath();
     for (const { a, b } of view.walls) {
@@ -352,10 +352,10 @@ export function startGame(canvas) {
     }
     ctx.stroke();
     ctx.shadowBlur = 0;
-    ctx.strokeStyle = "#5ee0c8";
+    ctx.strokeStyle = "#d7b07a";
     ctx.lineWidth = WALL;
     ctx.stroke();
-    ctx.strokeStyle = "rgba(210, 255, 245, 0.35)";
+    ctx.strokeStyle = "rgba(255, 236, 205, 0.35)";
     ctx.lineWidth = 3;
     ctx.stroke();
     ctx.restore();
@@ -365,10 +365,10 @@ export function startGame(canvas) {
     const pulse = 1 + Math.sin(t * 3.2) * 0.04;
     const pts = hexPoints(view.cx, view.cy, view.baseR * pulse);
     ctx.save();
-    ctx.shadowColor = "rgba(255, 140, 80, 0.45)";
+    ctx.shadowColor = "rgba(122, 212, 255, 0.4)";
     ctx.shadowBlur = 18;
-    ctx.fillStyle = "#2a1820";
-    ctx.strokeStyle = "#ff9a62";
+    ctx.fillStyle = "#152028";
+    ctx.strokeStyle = "#7ad4ff";
     ctx.lineWidth = 4;
     ctx.beginPath();
     ctx.moveTo(pts[0].x, pts[0].y);
@@ -378,7 +378,7 @@ export function startGame(canvas) {
     ctx.stroke();
     ctx.shadowBlur = 0;
     const ring = hexPoints(view.cx, view.cy, view.baseR * 0.62);
-    ctx.fillStyle = `rgba(255, 176, 92, ${0.28 + (state.energy / 100) * 0.45})`;
+    ctx.fillStyle = `rgba(122, 212, 255, ${0.22 + (state.energy / 100) * 0.5})`;
     ctx.beginPath();
     ctx.moveTo(ring[0].x, ring[0].y);
     for (const p of ring.slice(1)) ctx.lineTo(p.x, p.y);
@@ -391,12 +391,12 @@ export function startGame(canvas) {
     const t = now / 1000;
     ctx.clearRect(0, 0, view.w, view.h);
     const g = ctx.createRadialGradient(view.cx, view.cy, 40, view.cx, view.cy, view.arena * 1.6);
-    g.addColorStop(0, "#1a1028");
-    g.addColorStop(1, "#0b0612");
+    g.addColorStop(0, "#151b22");
+    g.addColorStop(1, "#080b0f");
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, view.w, view.h);
 
-    ctx.fillStyle = "rgba(255, 93, 108, 0.08)";
+    ctx.fillStyle = "rgba(196, 92, 255, 0.08)";
     ctx.beginPath();
     ctx.moveTo(view.gapA.x, view.gapA.y);
     ctx.lineTo(view.spawn.x + (view.gapA.x - view.gapMid.x) * 0.2, view.spawn.y + (view.gapA.y - view.gapMid.y) * 0.2);
@@ -414,7 +414,7 @@ export function startGame(canvas) {
       ctx.globalAlpha = 1;
       if (state.hover.ok) {
         ctx.beginPath();
-        ctx.strokeStyle = "rgba(94,224,200,0.18)";
+        ctx.strokeStyle = "rgba(215,176,122,0.22)";
         ctx.arc(state.hover.x, state.hover.y, TYPES[state.selected].range, 0, Math.PI * 2);
         ctx.stroke();
       }
@@ -441,32 +441,32 @@ export function startGame(canvas) {
 
     for (const enemy of state.enemies) {
       ctx.beginPath();
-      ctx.fillStyle = enemy.atBase ? "#ff8a6a" : "#ff5d6c";
-      ctx.shadowColor = "rgba(255, 80, 90, 0.55)";
+      ctx.fillStyle = enemy.atBase ? "#e8a0ff" : "#c45cff";
+      ctx.shadowColor = "rgba(196, 92, 255, 0.5)";
       ctx.shadowBlur = 10;
       ctx.arc(enemy.x, enemy.y, ENEMY_R, 0, Math.PI * 2);
       ctx.fill();
       ctx.shadowBlur = 0;
       ctx.fillStyle = "rgba(0,0,0,0.35)";
       ctx.fillRect(enemy.x - 8, enemy.y - 14, 16, 2);
-      ctx.fillStyle = "#f0c36a";
+      ctx.fillStyle = "#7ad4ff";
       ctx.fillRect(enemy.x - 8, enemy.y - 14, 16 * Math.max(0, enemy.hp / enemy.max), 2);
     }
 
     for (const pop of state.pops) {
       ctx.beginPath();
-      ctx.strokeStyle = `rgba(255,220,140,${pop.life * 2})`;
+      ctx.strokeStyle = `rgba(232, 210, 255,${pop.life * 2})`;
       ctx.arc(pop.x, pop.y, (1 - pop.life) * 18, 0, Math.PI * 2);
       ctx.stroke();
     }
     for (const tick of state.ticks) {
-      ctx.fillStyle = `rgba(244,236,255,${tick.life * 2})`;
+      ctx.fillStyle = `rgba(243,239,230,${tick.life * 2})`;
       ctx.font = "11px Helvetica Neue, sans-serif";
       ctx.fillText(tick.text, tick.x - 6, tick.y);
     }
 
     if (state.phase === "build" || state.phase === "between") {
-      ctx.fillStyle = "rgba(244,236,255,0.72)";
+      ctx.fillStyle = "rgba(243,239,230,0.72)";
       ctx.font = "600 18px Helvetica Neue, sans-serif";
       ctx.textAlign = "center";
       const left = Math.ceil(state.buildLeft);
@@ -475,14 +475,14 @@ export function startGame(canvas) {
     }
 
     if (state.phase === "lost") {
-      ctx.fillStyle = "rgba(10,6,16,0.55)";
+      ctx.fillStyle = "rgba(8,11,15,0.55)";
       ctx.fillRect(0, 0, view.w, view.h);
-      ctx.fillStyle = "#f4ecff";
+      ctx.fillStyle = "#f3efe6";
       ctx.textAlign = "center";
       ctx.font = "800 42px Helvetica Neue, sans-serif";
       ctx.fillText("Base fallen", view.cx, view.cy - 10);
       ctx.font = "16px Helvetica Neue, sans-serif";
-      ctx.fillStyle = "#9a86b8";
+      ctx.fillStyle = "#8b93a0";
       ctx.fillText(`Held ${state.wave} wave${state.wave === 1 ? "" : "s"}`, view.cx, view.cy + 22);
       ctx.textAlign = "start";
     }
