@@ -258,6 +258,10 @@ export function startGame(canvas, hooks = {}) {
       x: s.x,
       y: s.y,
       cool: 0,
+      quiet: 2,
+      kick: 0,
+      aimX: 0,
+      aimY: 0,
     });
     syncHud();
   });
@@ -763,6 +767,15 @@ export function startGame(canvas, hooks = {}) {
     enemy.atBase = false;
   };
 
+  const beginShot = (turret, ax, ay) => {
+    if ((turret.quiet ?? 2) > 1) {
+      turret.kick = 1;
+      turret.aimX = ax;
+      turret.aimY = ay;
+    }
+    turret.quiet = 0;
+  };
+
   const fire = (turret, dt) => {
     const spec = TYPES[turret.type];
     turret.cool -= dt;
@@ -781,6 +794,7 @@ export function startGame(canvas, hooks = {}) {
       const len = Math.hypot(dx, dy) || 1;
       const ux = dx / len;
       const uy = dy / len;
+      beginShot(turret, ux, uy);
       let hits = 0;
       for (const row of marks) {
         const px = row.enemy.x - turret.x;
@@ -806,6 +820,10 @@ export function startGame(canvas, hooks = {}) {
     }
 
     const target = marks[0].enemy;
+    const tdx = target.x - turret.x;
+    const tdy = target.y - turret.y;
+    const tlen = Math.hypot(tdx, tdy) || 1;
+    beginShot(turret, tdx / tlen, tdy / tlen);
     hurt(target, spec.damage, turret.x, turret.y);
     state.shots.push({
       x1: turret.x,
@@ -1029,11 +1047,15 @@ export function startGame(canvas, hooks = {}) {
     }
 
     for (const turret of state.turrets) {
+      const wave = Math.sin((turret.kick || 0) * Math.PI);
+      const nudge = wave * 5.5;
+      const px = turret.x + (turret.aimX || 0) * nudge;
+      const py = turret.y + (turret.aimY || 0) * nudge;
       ctx.beginPath();
       ctx.fillStyle = "rgba(0,0,0,0.28)";
-      ctx.ellipse(turret.x + 4, turret.y + 8, 12, 5, 0, 0, Math.PI * 2);
+      ctx.ellipse(px + 4, py + 8, 12 + wave, 5, 0, 0, Math.PI * 2);
       ctx.fill();
-      drawShape(ctx, turret.type, turret.x, turret.y, 30);
+      drawShape(ctx, turret.type, px, py, 30 + wave * 4);
     }
 
     for (const shot of state.shots) {
@@ -1120,6 +1142,10 @@ export function startGame(canvas, hooks = {}) {
     view = view.w !== canvas.width ? layout() : view;
 
     if (!state.paused && state.phase !== "menu" && state.phase !== "lost" && state.phase !== "won") {
+      for (const turret of state.turrets) {
+        turret.kick = Math.max(0, (turret.kick || 0) - dt / 0.2);
+        turret.quiet = (turret.quiet ?? 2) + dt;
+      }
       if (state.phase === "build" || state.phase === "between") {
         state.buildLeft -= dt;
         if (state.buildLeft <= 0) startWave();
