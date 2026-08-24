@@ -215,7 +215,11 @@ export function startGame(canvas, hooks = {}) {
     if (Math.hypot(x - view.cx, y - view.cy) < view.baseR + 22) return false;
     const wall = nearestEdge(x, y, intactEdges());
     if (wall && wall.dist < WALL * 0.85) return false;
-    return !state.turrets.some((t) => Math.hypot(t.x - x, t.y - y) < CELL * 0.72);
+    return !state.turrets.some((t) => {
+      const dx = Math.abs(t.x - x);
+      const dy = Math.abs(t.y - y);
+      return dx < CELL * 1.5 && dy < CELL * 1.5;
+    });
   };
 
   const canvasPos = (event) => {
@@ -959,8 +963,8 @@ export function startGame(canvas, hooks = {}) {
       ctx.closePath();
       ctx.fill();
     }
-    ctx.shadowColor = rgb(tone, hit ? 0.72 : 0.4);
-    ctx.shadowBlur = hit ? 28 : 18;
+    ctx.shadowColor = rgb(tone, hit ? 0.55 : 0.22);
+    ctx.shadowBlur = hit ? 14 : 6;
     ctx.fillStyle = hit ? "#2a1520" : "#152028";
     ctx.strokeStyle = rgb(tone);
     ctx.lineWidth = 4;
@@ -971,34 +975,23 @@ export function startGame(canvas, hooks = {}) {
     ctx.fill();
     ctx.stroke();
     ctx.shadowBlur = 0;
-    const gem = hexPoints(view.cx, view.cy, view.baseR * 0.52);
-    ctx.fillStyle = rgb(tone, 0.2 + frac * 0.5);
+    const barW = view.baseR * 1.05;
+    const barY = view.cy;
+    ctx.lineCap = "round";
     ctx.beginPath();
-    ctx.moveTo(gem[0].x, gem[0].y);
-    for (const p of gem.slice(1)) ctx.lineTo(p.x, p.y);
-    ctx.closePath();
-    ctx.fill();
-    const barR = view.baseR * 1.46;
-    ctx.beginPath();
-    ctx.strokeStyle = "rgba(8,11,15,0.7)";
-    ctx.lineWidth = 7;
-    ctx.arc(view.cx, view.cy, barR, 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(8,11,15,0.78)";
+    ctx.lineWidth = 3.2;
+    ctx.moveTo(view.cx - barW * 0.5, barY);
+    ctx.lineTo(view.cx + barW * 0.5, barY);
     ctx.stroke();
-    ctx.beginPath();
-    ctx.strokeStyle = "rgba(243,239,230,0.28)";
-    ctx.lineWidth = 5.4;
-    ctx.arc(view.cx, view.cy, barR, 0, Math.PI * 2);
-    ctx.stroke();
-    if (frac > 0.01) {
+    if (frac > 0.02) {
+      const hp = hit ? [120, 255, 150] : [62, 214, 112];
       ctx.beginPath();
-      ctx.strokeStyle = rgb(tone);
-      ctx.lineWidth = hit ? 5.6 : 4.6;
-      ctx.lineCap = "round";
-      ctx.shadowColor = rgb(tone, 0.55);
-      ctx.shadowBlur = hit ? 12 : 6;
-      ctx.arc(view.cx, view.cy, barR, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * frac);
+      ctx.strokeStyle = rgb(hp, 0.96);
+      ctx.lineWidth = hit ? 3.4 : 2.6;
+      ctx.moveTo(view.cx - barW * 0.5, barY);
+      ctx.lineTo(view.cx - barW * 0.5 + barW * frac, barY);
       ctx.stroke();
-      ctx.shadowBlur = 0;
     }
     ctx.restore();
   };
