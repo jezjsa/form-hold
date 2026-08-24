@@ -572,8 +572,8 @@ export function startGame(canvas, hooks = {}) {
     const toCoreX = view.cx - enemy.x;
     const toCoreY = view.cy - enemy.y;
     const dist = Math.hypot(toCoreX, toCoreY) || 1;
-    let vx = (toCoreX / dist) * 0.45;
-    let vy = (toCoreY / dist) * 0.45;
+    let vx = (toCoreX / dist) * 0.75;
+    let vy = (toCoreY / dist) * 0.75;
     const shot = pressed.shotFrom;
     const orbit = enemy.orbit || 1;
     if (shot) {
@@ -583,10 +583,10 @@ export function startGame(canvas, hooks = {}) {
       const danger = 170;
       if (sd < danger) {
         const w = 1 - sd / danger;
-        vx += (sx / sd) * (1.1 + w * 1.6);
-        vy += (sy / sd) * (1.1 + w * 1.6);
-        vx += (-sy / sd) * orbit * (1.8 + Math.abs(enemy.lane || 0) * 0.02);
-        vy += (sx / sd) * orbit * (1.8 + Math.abs(enemy.lane || 0) * 0.02);
+        vx += (sx / sd) * w * 0.4;
+        vy += (sy / sd) * w * 0.4;
+        vx += (-sy / sd) * orbit * (2.1 + Math.abs(enemy.lane || 0) * 0.02);
+        vy += (sx / sd) * orbit * (2.1 + Math.abs(enemy.lane || 0) * 0.02);
       }
     }
     const dx = enemy.x - pressed.x;
@@ -601,8 +601,72 @@ export function startGame(canvas, hooks = {}) {
     return { x: vx, y: vy };
   };
 
+  const pickSafeWall = (enemy, shot) => {
+    const intact = view.sides.filter((side) => state.walls[side.i].hp > 0);
+    if (!intact.length) return null;
+    let best = null;
+    let bestScore = -Infinity;
+    for (const side of intact) {
+      const fromGun = shot
+        ? Math.hypot(side.mx - shot.x, side.my - shot.y)
+        : 80;
+      const travel = Math.hypot(side.mx - enemy.x, side.my - enemy.y);
+      const already = state.enemies.filter((other) => other.role === "breaker" && other.wall === side.i).length;
+      const score = fromGun - travel * 0.22 - already * 40;
+      if (score > bestScore) {
+        bestScore = score;
+        best = side;
+      }
+    }
+    return best;
+  };
+
+  const becomeBreaker = (enemy, shot) => {
+    if (enemy.role === "breaker") return true;
+    const side = pickSafeWall(enemy, shot);
+    if (!side) return false;
+    enemy.role = "breaker";
+    enemy.wall = side.i;
+    enemy.egress = pointInHex(enemy.x, enemy.y, view.cx, view.cy, view.arena - 2)
+      || Math.hypot(enemy.x - view.cx, enemy.y - view.cy) < view.arena * 0.94;
+    enemy.chew = CHEW + threatOf(state.wave) * 0.28;
+    enemy.chewing = false;
+    enemy.peeling = false;
+    enemy.atBase = false;
+    return true;
+  };
+
+  const leaveHex = (enemy) => {
+    const open = openSides();
+    if (open.length) {
+      let gate = open[0];
+      let best = Infinity;
+      for (const side of open) {
+        const midX = (side.mx + enemy.x) * 0.5;
+        const midY = (side.my + enemy.y) * 0.5;
+        const travel = Math.hypot(side.mx - enemy.x, side.my - enemy.y);
+        const gunPen = enemy.shotFrom
+          ? Math.hypot(midX - enemy.shotFrom.x, midY - enemy.shotFrom.y)
+          : 90;
+        const score = travel - gunPen * 0.45;
+        if (score < best) {
+          best = score;
+          gate = side;
+        }
+      }
+      return {
+        x: gate.mx + gate.nx * (view.arena * 0.24) - enemy.x,
+        y: gate.my + gate.ny * (view.arena * 0.24) - enemy.y,
+      };
+    }
+    const dist = Math.hypot(enemy.x - view.cx, enemy.y - view.cy) || 1;
+    return { x: enemy.x - view.cx, y: enemy.y - view.cy };
+  };
+
   const commitPeel = (enemy, pressed) => {
-    if (enemy.peeling) return;
+    if (enemy.peeling || enemy.role === "breaker") return;
+    const shot = pressed.shotFrom;
+    if (Math.random() < 0.52 && becomeBreaker(enemy, shot)) return;
     enemy.peeling = true;
     const side = (enemy.x - pressed.x) * (pressed.shotFrom?.y - pressed.y || 0)
       - (enemy.y - pressed.y) * (pressed.shotFrom?.x - pressed.x || 0);
@@ -639,6 +703,30 @@ export function startGame(canvas, hooks = {}) {
     enemy.chewing = false;
 
     if (enemy.role === "breaker") {
+      if (enemy.egress) {
+        const dist = Math.hypot(enemy.x - view.cx, enemy.y - view.cy);
+        const outside = dist > view.arena + 8
+          && !pointInHex(enemy.x, enemy.y, view.cx, view.cy, view.arena + 2);
+        if (outside) {
+          enemy.egress = false;
+        } else {
+          const leave = leaveHex(enemy);
+          let vx = leave.x;
+          let vy = leave.y;
+          if (enemy.shotFrom) {
+            const sx = enemy.x - enemy.shotFrom.x;
+            const sy = enemy.y - enemy.shotFrom.y;
+            const sd = Math.hypot(sx, sy) || 1;
+            vx += (sx / sd) * 0.8;
+            vy += (sy / sd) * 0.8;
+          }
+          const n = Math.hypot(vx, vy) || 1;
+          enemy.x += (vx / n) * enemy.speed * dt;
+          enemy.y += (vy / n) * enemy.speed * dt;
+          enemy.atBase = false;
+          return;
+        }
+      }
       const wall = state.walls[enemy.wall];
       const side = view.sides[enemy.wall];
       if (!wall || wall.hp <= 0 || !side) {
@@ -781,6 +869,7 @@ export function startGame(canvas, hooks = {}) {
     enemy.hp -= amount;
     enemy.underFire = 0.9;
     enemy.shotFrom = { x: ox, y: oy };
+    enemy.hits = (enemy.hits || 0) + 1;
     state.ticks.push({
       x: enemy.x,
       y: enemy.y - 10,
@@ -793,6 +882,10 @@ export function startGame(canvas, hooks = {}) {
       state.score += 12;
       state.gold += 4 + Math.floor(state.wave * 0.6);
       state.pops.push({ x: enemy.x, y: enemy.y, life: 0.35, r: 10 });
+      return;
+    }
+    if (enemy.role === "runner" && enemy.hits >= 2) {
+      becomeBreaker(enemy, { x: ox, y: oy });
     }
   };
 
