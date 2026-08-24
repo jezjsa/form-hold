@@ -454,6 +454,12 @@ input {
   font-weight: 700;
 }
 
+.btn-primary.rush {
+  background: #3ed670;
+  border-color: #2bb85a;
+  color: #0c1610;
+}
+
 .btn-ghost {
   background: transparent;
 }

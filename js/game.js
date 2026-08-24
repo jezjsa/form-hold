@@ -277,7 +277,9 @@ export function startGame(canvas, hooks = {}) {
   });
   window.addEventListener("keydown", (event) => {
     if (event.repeat || event.metaKey || event.ctrlKey || event.altKey) return;
-    if (event.code !== "Space" && event.key !== " ") return;
+    const space = event.code === "Space" || event.key === " ";
+    const rush = event.code === "ArrowRight" || event.key === "ArrowRight";
+    if (!space && !rush) return;
     const target = event.target;
     if (
       target instanceof HTMLInputElement
@@ -288,7 +290,8 @@ export function startGame(canvas, hooks = {}) {
       return;
     }
     event.preventDefault();
-    togglePause();
+    if (space) togglePause();
+    if (rush) rushWave();
   });
   ui.restart?.addEventListener("click", () => {
     reset({ play: false });
