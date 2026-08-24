@@ -1,4 +1,5 @@
 import { startGame } from "./game.js";
+import { avatarUrl } from "./avatars.js";
 import { APP_VERSION } from "./version.js";
 import {
   adoptFieldRushIdentity,
@@ -49,7 +50,7 @@ function nameHue(name) {
 
 function boardFace(row) {
   if (row.avatar) {
-    return `<img class="board-face" src="https://field-rush.vercel.app/avatars/${encodeURIComponent(row.avatar)}.png" alt="" width="22" height="22" />`;
+    return `<img class="board-face" src="${avatarUrl(row.avatar)}" alt="" width="22" height="22" />`;
   }
   return `<span class="board-face board-dot" style="background:hsl(${nameHue(row.name)} 46% 42%)"></span>`;
 }
