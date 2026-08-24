@@ -839,8 +839,9 @@ export function startGame(canvas, hooks = {}) {
       ctx.lineTo(ex, ey);
       ctx.stroke();
       if (t > 0.02) {
+        const hp = flash ? [120, 255, 150] : [62, 214, 112];
         ctx.beginPath();
-        ctx.strokeStyle = rgb(tone, 0.95);
+        ctx.strokeStyle = rgb(hp, 0.96);
         ctx.lineWidth = flash ? 2.8 : 2.2;
         ctx.moveTo(sx, sy);
         ctx.lineTo(sx + (ex - sx) * t, sy + (ey - sy) * t);
