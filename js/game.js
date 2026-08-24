@@ -352,7 +352,7 @@ export function startGame(canvas, hooks = {}) {
     if (ui.pause) ui.pause.textContent = "Pause";
     if (ui.hint) {
       ui.hint.textContent = play
-        ? "Place shapes in or around the hex. Breakers chew the brass — slowly."
+        ? "Place shapes in or around the hex. Amber sparks blow a gun if they get close."
         : "Defend your base from attackers.";
     }
     if (play) hooks.onReset?.();
@@ -403,9 +403,28 @@ export function startGame(canvas, hooks = {}) {
     const intact = view.sides.filter((side) => state.walls[side.i].hp > 0);
     const open = openSides();
     const gate = open[Math.floor(Math.random() * open.length)] ?? view.sides[OPEN_EDGE];
-    const wantBreaker = intact.length > 0 && (state.spawned % 5 === 3 || (state.wave >= 3 && Math.random() < 0.16));
+    const wantBomber = state.turrets.length > 0 && (
+      state.spawned % 8 === 5
+      || (state.wave >= 2 && Math.random() < 0.12)
+    );
+    const wantBreaker = !wantBomber && intact.length > 0 && (state.spawned % 5 === 3 || (state.wave >= 3 && Math.random() < 0.16));
     const along = (Math.random() - 0.5) * 52;
-    if (wantBreaker) {
+    if (wantBomber) {
+      const at = spawnAtSide(gate, along * 1.2);
+      state.enemies.push({
+        role: "bomber",
+        wall: gate.i,
+        x: at.x,
+        y: at.y,
+        hp: 7 + threatOf(state.wave) * 2.4,
+        max: 7 + threatOf(state.wave) * 2.4,
+        speed: 54 + threatOf(state.wave) * 3.6 + (Math.random() - 0.5) * 6,
+        atBase: false,
+        chewing: false,
+        orbit: Math.random() < 0.5 ? 1 : -1,
+        lane: (Math.random() - 0.45) * 56,
+      });
+    } else if (wantBreaker) {
       const wall = intact[Math.floor(Math.random() * intact.length)];
       const at = spawnAtSide(wall, along);
       state.enemies.push({
@@ -512,7 +531,7 @@ export function startGame(canvas, hooks = {}) {
     let ox = 0;
     let oy = 0;
     for (const other of state.enemies) {
-      if (other === enemy || other.role === "breaker" || other.dead) continue;
+      if (other === enemy || other.role === "breaker" || other.role === "bomber" || other.dead) continue;
       const dx = enemy.x - other.x;
       const dy = enemy.y - other.y;
       const d = Math.hypot(dx, dy);
@@ -570,6 +589,7 @@ export function startGame(canvas, hooks = {}) {
 
   const becomeBreaker = (enemy, shot) => {
     if (enemy.role === "breaker") return true;
+    if (enemy.role === "bomber") return false;
     const side = pickSafeWall(enemy, shot);
     if (!side) return false;
     enemy.role = "breaker";
@@ -583,7 +603,7 @@ export function startGame(canvas, hooks = {}) {
   };
 
   const commitPeel = (enemy, pressed) => {
-    if (enemy.peeling || enemy.role === "breaker") return;
+    if (enemy.peeling || enemy.role === "breaker" || enemy.role === "bomber") return;
     const shot = pressed.shotFrom;
     if (Math.random() < 0.52 && becomeBreaker(enemy, shot)) return;
     enemy.peeling = true;
@@ -653,9 +673,55 @@ export function startGame(canvas, hooks = {}) {
     if (wall.hp <= 0) breachWall(enemy.wall);
   };
 
+  const nearestGun = (enemy) => {
+    let best = null;
+    let bestD = Infinity;
+    for (const turret of state.turrets) {
+      const d = Math.hypot(turret.x - enemy.x, turret.y - enemy.y);
+      if (d < bestD) {
+        bestD = d;
+        best = turret;
+      }
+    }
+    return best ? { turret: best, d: bestD } : null;
+  };
+
+  const detonateGun = (enemy, turret) => {
+    enemy.dead = true;
+    state.turrets = state.turrets.filter((row) => row !== turret);
+    state.pops.push({ x: turret.x, y: turret.y, life: 0.6, r: 30 });
+    state.pops.push({ x: enemy.x, y: enemy.y, life: 0.4, r: 16 });
+    state.ticks.push({ x: turret.x, y: turret.y - 14, text: "boom", life: 0.75 });
+    if (ui.hint) ui.hint.textContent = "A spark took a gun with it.";
+  };
+
   const steer = (enemy, dt) => {
     const edges = intactEdges();
     enemy.chewing = false;
+
+    if (enemy.role === "bomber") {
+      const mark = nearestGun(enemy);
+      if (mark) {
+        if (mark.d < CELL * 0.72) {
+          detonateGun(enemy, mark.turret);
+          return;
+        }
+        const dx = mark.turret.x - enemy.x;
+        const dy = mark.turret.y - enemy.y;
+        const dist = mark.d || 1;
+        enemy.x += (dx / dist) * enemy.speed * dt;
+        enemy.y += (dy / dist) * enemy.speed * dt;
+        const wall = nearestEdge(enemy.x, enemy.y, edges);
+        if (wall && wall.dist < WALL * 0.5 + ENEMY_R + 6) {
+          const nlen = Math.hypot(wall.nx, wall.ny) || 1;
+          enemy.x += (wall.nx / nlen) * (WALL * 0.5 + ENEMY_R + 6 - wall.dist);
+          enemy.y += (wall.ny / nlen) * (WALL * 0.5 + ENEMY_R + 6 - wall.dist);
+        }
+        holdOffCore(enemy, aroundR());
+        enemy.atBase = false;
+        return;
+      }
+    }
 
     if (enemy.role === "breaker") {
       const wall = state.walls[enemy.wall];
@@ -851,7 +917,7 @@ export function startGame(canvas, hooks = {}) {
       enemy.dead = true;
       state.kills += 1;
       state.score += 12;
-      state.gold += enemy.role === "breaker" ? 2 : 1;
+      state.gold += enemy.role === "breaker" ? 2 : enemy.role === "bomber" ? 3 : 1;
       state.pops.push({ x: enemy.x, y: enemy.y, life: 0.35, r: 10 });
       return;
     }
@@ -1071,17 +1137,30 @@ export function startGame(canvas, hooks = {}) {
 
     for (const enemy of state.enemies) {
       const breaker = enemy.role === "breaker";
-      const r = breaker ? ENEMY_R + 2.2 : ENEMY_R;
+      const bomber = enemy.role === "bomber";
+      const r = breaker ? ENEMY_R + 2.2 : bomber ? ENEMY_R + 1.4 : ENEMY_R;
       ctx.beginPath();
       ctx.fillStyle = breaker
         ? (enemy.chewing ? "#ff6b5a" : "#e24b4b")
-        : (enemy.atBase ? "#e8a0ff" : "#c45cff");
-      ctx.shadowColor = breaker ? "rgba(226, 75, 75, 0.55)" : "rgba(196, 92, 255, 0.5)";
-      ctx.shadowBlur = 10;
+        : bomber
+          ? "#ff9a2e"
+          : (enemy.atBase ? "#e8a0ff" : "#c45cff");
+      ctx.shadowColor = breaker
+        ? "rgba(226, 75, 75, 0.55)"
+        : bomber
+          ? "rgba(255, 154, 46, 0.65)"
+          : "rgba(196, 92, 255, 0.5)";
+      ctx.shadowBlur = bomber ? 14 : 10;
       if (breaker) {
         ctx.moveTo(enemy.x, enemy.y - r);
         ctx.lineTo(enemy.x + r * 0.92, enemy.y + r * 0.7);
         ctx.lineTo(enemy.x - r * 0.92, enemy.y + r * 0.7);
+        ctx.closePath();
+      } else if (bomber) {
+        ctx.moveTo(enemy.x, enemy.y - r);
+        ctx.lineTo(enemy.x + r, enemy.y);
+        ctx.lineTo(enemy.x, enemy.y + r);
+        ctx.lineTo(enemy.x - r, enemy.y);
         ctx.closePath();
       } else {
         ctx.arc(enemy.x, enemy.y, r, 0, Math.PI * 2);
@@ -1090,7 +1169,7 @@ export function startGame(canvas, hooks = {}) {
       ctx.shadowBlur = 0;
       ctx.fillStyle = "rgba(0,0,0,0.35)";
       ctx.fillRect(enemy.x - 8, enemy.y - 14, 16, 2);
-      ctx.fillStyle = breaker ? "#ff6b5a" : "#e8a0ff";
+      ctx.fillStyle = breaker ? "#ff6b5a" : bomber ? "#ffb020" : "#e8a0ff";
       ctx.fillRect(enemy.x - 8, enemy.y - 14, 16 * Math.max(0, enemy.hp / enemy.max), 2);
     }
 
