@@ -1,0 +1,165 @@
+:root {
+  --ink: #12081c;
+  --panel: #1a0f2a;
+  --line: #3a2754;
+  --text: #f4ecff;
+  --dim: #9a86b8;
+  --mint: #5ee0c8;
+  --gold: #f0c36a;
+  --coral: #ff5d6c;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  min-height: 100%;
+  background: radial-gradient(1200px 700px at 50% 30%, #241236 0%, var(--ink) 70%);
+  color: var(--text);
+  font-family: "Helvetica Neue", Arial, sans-serif;
+}
+
+.shell {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 20px 18px;
+  gap: 12px;
+}
+
+.top, .dock {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.kicker {
+  margin: 0;
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--mint);
+}
+
+h1 {
+  margin: 2px 0 0;
+  font-size: 22px;
+  letter-spacing: -0.04em;
+}
+
+.meters {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+}
+
+.meter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 52px;
+}
+
+.meter span {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.meter strong { font-size: 22px; letter-spacing: -0.03em; }
+
+.meter-wide {
+  min-width: 180px;
+}
+
+.energy {
+  width: 160px;
+  height: 10px;
+  border: 1px solid #5a3a2a;
+  background: #2a1420;
+  overflow: hidden;
+}
+
+.energy i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #ff7a4d, var(--gold));
+  transform-origin: left center;
+}
+
+.stage {
+  position: relative;
+  flex: 1;
+  min-height: 520px;
+}
+
+#game {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border: 1px solid var(--line);
+  background: #0d0716;
+}
+
+.hint {
+  position: absolute;
+  left: 16px;
+  bottom: 12px;
+  margin: 0;
+  color: var(--dim);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+}
+
+.shapes {
+  display: flex;
+  gap: 10px;
+}
+
+.shape {
+  appearance: none;
+  min-width: 118px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.shape.on {
+  border-color: var(--mint);
+  box-shadow: 0 0 0 1px rgba(94, 224, 200, 0.35);
+}
+
+.shape .icon {
+  width: 22px;
+  height: 22px;
+  flex: none;
+}
+
+.shape b { display: block; font-size: 13px; }
+.shape small { color: var(--dim); }
+
+.tools { display: flex; gap: 8px; }
+
+.ghost {
+  appearance: none;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+}
+
+@media (max-width: 720px) {
+  .top, .dock { flex-wrap: wrap; }
+  .meter-wide { min-width: 120px; }
+  .energy { width: 110px; }
+}

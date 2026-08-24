@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Form Hold — Hex</title>
+  <link rel="stylesheet" href="/css/theme.css" />
+</head>
+<body>
+  <div class="shell">
+    <header class="top">
+      <div class="brand">
+        <p class="kicker">Local only</p>
+        <h1>Form Hold</h1>
+      </div>
+      <div class="meters">
+        <div class="meter">
+          <span>Wave</span>
+          <strong id="wave">1</strong>
+        </div>
+        <div class="meter meter-wide">
+          <span>Base</span>
+          <div class="energy" aria-label="Base energy">
+            <i id="energy-fill"></i>
+          </div>
+          <strong id="energy-label">100</strong>
+        </div>
+        <div class="meter">
+          <span>Gold</span>
+          <strong id="gold">70</strong>
+        </div>
+      </div>
+    </header>
+
+    <div class="stage">
+      <canvas id="game" width="1280" height="800"></canvas>
+      <p class="hint" id="hint">Pick a shape, then click inside the hex to place it.</p>
+    </div>
+
+    <footer class="dock">
+      <div class="shapes" id="shapes"></div>
+      <div class="tools">
+        <button type="button" class="ghost" id="btn-pause">Pause</button>
+        <button type="button" class="ghost" id="btn-restart">Restart</button>
+      </div>
+    </footer>
+  </div>
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>
