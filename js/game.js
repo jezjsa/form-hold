@@ -78,6 +78,7 @@ export function startGame(canvas, hooks = {}) {
     restart: $("btn-reset"),
     speed: $("btn-speed"),
     mute: $("btn-mute"),
+    rush: $("btn-rush"),
   };
 
   const state = {
@@ -228,6 +229,9 @@ export function startGame(canvas, hooks = {}) {
     ui.mute.textContent = state.muted ? "Unmute" : "Mute";
     ui.mute.setAttribute("aria-pressed", state.muted ? "true" : "false");
   });
+  ui.rush?.addEventListener("click", () => {
+    rushWave();
+  });
 
   const finish = (won) => {
     if (state.posted) return;
@@ -288,6 +292,29 @@ export function startGame(canvas, hooks = {}) {
     if (ui.hint) ui.hint.textContent = `Wave ${state.wave} — hold the hex. Watch the walls.`;
   };
 
+  const waitingForWave = () => state.phase === "build" || state.phase === "between";
+
+  const rushBonusFor = (remaining) => {
+    if (typeof remaining !== "number" || remaining < 0.15) return 0;
+    return Math.max(0, Math.round(remaining * 6 * Math.max(1, state.wave)));
+  };
+
+  const rushWave = () => {
+    if (!waitingForWave()) return;
+    const bonus = rushBonusFor(state.buildLeft);
+    if (bonus) {
+      state.score += bonus;
+      state.ticks.push({
+        x: view.cx - 22,
+        y: view.cy - view.arena - 6,
+        text: `Rush +${bonus}`,
+        life: 1.15,
+      });
+    }
+    startWave();
+    syncHud();
+  };
+
   const spawnAtSide = (side, along) => {
     const tx = side.b.x - side.a.x;
     const ty = side.b.y - side.a.y;
@@ -339,6 +366,17 @@ export function startGame(canvas, hooks = {}) {
   };
 
   const syncHud = () => {
+    if (ui.rush) {
+      const wait = waitingForWave();
+      ui.rush.classList.toggle("hidden", !wait);
+      if (wait) {
+        const secs = Math.ceil(Math.max(0, state.buildLeft));
+        const bonus = rushBonusFor(state.buildLeft);
+        ui.rush.textContent = bonus
+          ? `Wave ${state.wave} in ${secs}  +${bonus}`
+          : `Wave ${state.wave} in ${secs}`;
+      }
+    }
     hooks.onHud?.({
       lives: Math.max(0, Math.ceil(state.energy / 5)),
       gold: Math.floor(state.gold),
@@ -867,7 +905,13 @@ export function startGame(canvas, hooks = {}) {
       ctx.font = "600 18px Helvetica Neue, sans-serif";
       ctx.textAlign = "center";
       const left = Math.ceil(state.buildLeft);
-      ctx.fillText(state.phase === "build" ? `First wave in ${left}s` : `Next wave in ${left}s`, view.cx, view.cy - view.arena - 18);
+      const bonus = rushBonusFor(state.buildLeft);
+      const extra = bonus ? `  +${bonus}` : "";
+      ctx.fillText(
+        state.phase === "build" ? `First wave in ${left}s${extra}` : `Next wave in ${left}s${extra}`,
+        view.cx,
+        view.cy - view.arena - 18,
+      );
       ctx.textAlign = "start";
     }
 

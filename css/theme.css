@@ -244,6 +244,12 @@ html, body {
   border-top: 0;
 }
 
+.rush {
+  margin-left: auto;
+  white-space: nowrap;
+  flex: none;
+}
+
 .shapes { display: flex; gap: 10px; flex-wrap: wrap; }
 
 .shape {
