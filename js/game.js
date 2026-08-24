@@ -591,6 +591,18 @@ export function startGame(canvas, hooks = {}) {
     }
   };
 
+  const wallTone = (frac, hit) => {
+    const brass = [215, 176, 122];
+    const gold = [240, 196, 120];
+    const rose = [255, 108, 96];
+    const hot = [255, 214, 150];
+    let col = frac > 0.5
+      ? mixRgb(gold, brass, (frac - 0.5) / 0.5)
+      : mixRgb(rose, gold, frac / 0.5);
+    if (hit) col = mixRgb(col, hot, 0.72);
+    return col;
+  };
+
   const drawWalls = () => {
     ctx.save();
     ctx.lineCap = "round";
@@ -600,29 +612,61 @@ export function startGame(canvas, hooks = {}) {
       if (wall.hp <= 0) continue;
       const t = wall.hp / wall.max;
       const flash = wall.flash > 0;
-      ctx.shadowColor = flash ? "rgba(255, 176, 96, 0.55)" : "rgba(215, 176, 122, 0.28)";
+      const tone = wallTone(t, flash);
+      ctx.shadowColor = flash ? rgb(tone, 0.55) : "rgba(215, 176, 122, 0.28)";
       ctx.shadowBlur = flash ? 22 : 18;
-      ctx.strokeStyle = "#3a2f22";
-      ctx.lineWidth = WALL + 10;
+      ctx.strokeStyle = "rgba(90, 70, 46, 0.88)";
+      ctx.lineWidth = WALL + 8;
       ctx.beginPath();
       ctx.moveTo(side.a.x, side.a.y);
       ctx.lineTo(side.b.x, side.b.y);
       ctx.stroke();
       ctx.shadowBlur = 0;
-      ctx.strokeStyle = flash ? "#f0c48a" : `rgb(${Math.round(120 + 95 * t)}, ${Math.round(80 + 96 * t)}, ${Math.round(50 + 72 * t)})`;
-      ctx.lineWidth = WALL * (0.72 + 0.28 * t);
+      const dxw = side.b.x - side.a.x;
+      const dyw = side.b.y - side.a.y;
+      const eat = (1 - t) * 0.5;
+      ctx.beginPath();
+      ctx.strokeStyle = rgb(tone);
+      ctx.lineWidth = WALL * (0.78 + 0.22 * t);
+      ctx.moveTo(side.a.x + dxw * eat, side.a.y + dyw * eat);
+      ctx.lineTo(side.b.x - dxw * eat, side.b.y - dyw * eat);
       ctx.stroke();
-      if (t < 0.72) {
-        ctx.strokeStyle = `rgba(40, 28, 18, ${0.18 + (1 - t) * 0.45})`;
-        ctx.lineWidth = 2;
-        ctx.setLineDash([10, 11]);
+
+      const inset = WALL * 1.72;
+      const ax = side.a.x - side.nx * inset;
+      const ay = side.a.y - side.ny * inset;
+      const bx = side.b.x - side.nx * inset;
+      const by = side.b.y - side.ny * inset;
+      const dx = bx - ax;
+      const dy = by - ay;
+      const len = Math.hypot(dx, dy) || 1;
+      const pad = Math.min(18, len * 0.12) / len;
+      const sx = ax + dx * pad;
+      const sy = ay + dy * pad;
+      const ex = bx - dx * pad;
+      const ey = by - dy * pad;
+      ctx.beginPath();
+      ctx.strokeStyle = "rgba(8,11,15,0.72)";
+      ctx.lineWidth = 5.4;
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(ex, ey);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.strokeStyle = "rgba(243,239,230,0.32)";
+      ctx.lineWidth = 4;
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(ex, ey);
+      ctx.stroke();
+      if (t > 0.02) {
+        ctx.beginPath();
+        ctx.strokeStyle = rgb(tone);
+        ctx.lineWidth = flash ? 4.2 : 3.4;
+        ctx.shadowColor = rgb(tone, 0.45);
+        ctx.shadowBlur = flash ? 10 : 4;
+        ctx.moveTo(sx, sy);
+        ctx.lineTo(sx + (ex - sx) * t, sy + (ey - sy) * t);
         ctx.stroke();
-        ctx.setLineDash([]);
-      }
-      if (t < 0.38) {
-        ctx.strokeStyle = "rgba(255, 236, 205, 0.18)";
-        ctx.lineWidth = 2;
-        ctx.stroke();
+        ctx.shadowBlur = 0;
       }
     }
     ctx.restore();
